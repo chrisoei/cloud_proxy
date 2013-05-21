@@ -61,6 +61,8 @@ var app = express();
 
 app.get('/:endPoint/:bucket/:key', function(req, res) {
 
+    console.log("Got request from ", req.connection.remoteAddress);
+
     mimeType(req.params.key, function(err, mt) {
 
         res.setHeader('Content-Type', mt);
