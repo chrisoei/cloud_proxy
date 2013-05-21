@@ -9,11 +9,7 @@ var http = require('http');
 var redis = require('redis').createClient();
 
 function mimeType(fn, callback) {
-    var t = fn;
-    if (/\.gpg$/.test(t)) {
-        t = fn.slice(0, -4);
-    }
-    var ext = /\.(\w+)$/.exec(t)[1];
+    var ext = /\.(\w+)(\.gpg)?$/.exec(fn)[1];
     redis.hget('io.oei:mime-types', ext, callback);
 }
 
