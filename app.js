@@ -9,23 +9,25 @@ var http = require('http');
 var redis = require('redis').createClient();
 
 function mimeType(fn, callback) {
-  var t = fn;
-  if (/\.gpg$/.test(t)) { t = fn.slice(0, -4); }
-  var ext = /\.(\w+)$/.exec(t)[1];
-  redis.hget('io.oei:mime-types', ext, callback);
+    var t = fn;
+    if (/\.gpg$/.test(t)) {
+        t = fn.slice(0, -4);
+    }
+    var ext = /\.(\w+)$/.exec(t)[1];
+    redis.hget('io.oei:mime-types', ext, callback);
 }
 
 
 function s3url(options) {
 
-    var expires = ((new Date()).getTime()/1000 + options.expires).toFixed(0);
+    var expires = ((new Date()).getTime() / 1000 + options.expires).toFixed(0);
 
     var stringToSign = [
-        'GET',
-        '',
-        '',
+            'GET',
+            '',
+            '',
         expires,
-        '/' + options.bucket + '/' + options.key
+            '/' + options.bucket + '/' + options.key
     ].join("\n");
 
     var hmac = crypto.createHmac('sha1', options.awsKey);
@@ -35,13 +37,12 @@ function s3url(options) {
     var signature = encodeURIComponent(hmac.digest('base64'));
 
     return [
-      '/',
-      options.bucket, '/',
-      options.key,
-      '?AWSAccessKeyId=', options.awsId,
-      '&Expires=', expires,
-      '&Signature=', signature
-    ].join('');
+        '/',
+        options.bucket, '/',
+        options.key,
+        '?AWSAccessKeyId=', options.awsId,
+        '&Expires=', expires,
+        '&Signature=', signature].join('');
 }
 
 function sendFile(key, fn, res) {
@@ -50,9 +51,9 @@ function sendFile(key, fn, res) {
         res.end(contents);
     };
     if (/\.gpg$/.test(key)) {
-      gpg.decryptFile(fn, function(err, contents) {
-        setAndSend(contents);
-      });
+        gpg.decryptFile(fn, function(err, contents) {
+            setAndSend(contents);
+        });
     } else {
         setAndSend(fs.readFileSync(fn));
     }
@@ -63,54 +64,53 @@ var app = express();
 
 app.get('/:endPoint/:bucket/:key', function(req, res) {
 
-  mimeType(req.params.key, function(err, mt) {
+    mimeType(req.params.key, function(err, mt) {
 
-  res.setHeader('Content-Type', mt);
-  var path = req.params.bucket + '/' + req.params.key;
+        res.setHeader('Content-Type', mt);
+        var path = req.params.bucket + '/' + req.params.key;
 
-  var sha256 = crypto.createHash('sha256');
-  sha256.write(path);
-  var fn = '/Users/c/.cache/s3proxy/' + sha256.digest('hex');
+        var sha256 = crypto.createHash('sha256');
+        sha256.write(path);
+        var fn = '/Users/c/.cache/s3proxy/' + sha256.digest('hex');
 
-  if (fs.existsSync(fn)) {
-    console.log("Cache hit: " + path);
-    sendFile(req.params.key, fn, res);
-  } else {
+        if (fs.existsSync(fn)) {
+            console.log("Cache hit: " + path);
+            sendFile(req.params.key, fn, res);
+        } else {
 
 
-  ws = fs.createWriteStream(fn);
+            ws = fs.createWriteStream(fn);
 
-  var url = s3url({
-    bucket: req.params.bucket,
-    key: req.params.key,
-    awsId: process.env.AWS_ACCESS_KEY_ID,
-    awsKey: process.env.AWS_SECRET_ACCESS_KEY,
-    expires: 3600
-  });
+            var url = s3url({
+                bucket: req.params.bucket,
+                key: req.params.key,
+                awsId: process.env.AWS_ACCESS_KEY_ID,
+                awsKey: process.env.AWS_SECRET_ACCESS_KEY,
+                expires: 3600
+            });
 
-  console.log('Requesting from s3: ' + path);
-  https.get({
-    host: "s3-" + req.params.endPoint + ".amazonaws.com",
-    path: url
+            console.log('Requesting from s3: ' + path);
+            https.get({
+                host: "s3-" + req.params.endPoint + ".amazonaws.com",
+                path: url
 
-  }, function(proxy_res) {
-    console.log("Got response from s3: " + proxy_res.statusCode);
+            }, function(proxy_res) {
+                console.log("Got response from s3: " + proxy_res.statusCode);
 
-    proxy_res.on('data', function(d) {
-      ws.write(d);
+                proxy_res.on('data', function(d) {
+                    ws.write(d);
+                });
+
+                proxy_res.on('end', function(d) {
+                    ws.end(d, function() {
+                        sendFile(req.params.key, fn, res);
+                    });
+                });
+            });
+
+        }
     });
-
-    proxy_res.on('end', function(d) {
-      ws.end(d, function() {
-        sendFile(req.params.key, fn, res);
-      });
-    });
-  });
-
-}
-});
 });
 
 app.listen(4000);
 console.log('Listening on port 4000');
-
