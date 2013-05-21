@@ -43,6 +43,7 @@ function s3url(options) {
 
 function sendFile(key, fn, res) {
     var setAndSend = function(contents) {
+        contents = (contents === undefined) ? '' : contents;
         res.setHeader('Content-Length', contents.length);
         res.end(contents);
     };
