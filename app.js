@@ -6,10 +6,13 @@ var fs = require('fs');
 var gpg = require('gpg');
 var https = require('https');
 var http = require('http');
+var redis = require('redis').createClient();
 
-function mimeType(fn) {
-  if (/\.webp(\.gpg?)$/.test(fn)) { return 'image/webp'; }
-  if (/\.webm(\.gpg?)$/.test(fn)) { return 'video/webm'; }
+function mimeType(fn, callback) {
+  var t = fn;
+  if (/\.gpg$/.test(t)) { t = fn.slice(0, -4); }
+  var ext = /\.(\w+)$/.exec(t)[1];
+  redis.hget('io.oei:mime-types', ext, callback);
 }
 
 
@@ -44,10 +47,13 @@ function s3url(options) {
 function sendFile(key, fn, res) {
     if (/\.gpg$/.test(key)) {
           gpg.decryptFile(fn, function(err, contents) {
+            res.setHeader('Content-Length', contents.length);
             res.end(contents);
           });
     } else {
-      res.end(fs.readFileSync(fn));
+      var contents = fs.readFileSync(fn);
+      res.setHeader('Content-Length', contents.length);
+      res.end(contents);
     }
 }
 
@@ -56,7 +62,9 @@ var app = express();
 
 app.get('/:endPoint/:bucket/:key', function(req, res) {
 
-  res.setHeader('Content-Type', mimeType(req.params.key));
+  mimeType(req.params.key, function(err, mt) {
+
+  res.setHeader('Content-Type', mt);
   var path = req.params.bucket + '/' + req.params.key;
 
   var sha256 = crypto.createHash('sha256');
@@ -99,6 +107,7 @@ app.get('/:endPoint/:bucket/:key', function(req, res) {
   });
 
 }
+});
 });
 
 app.listen(4000);
