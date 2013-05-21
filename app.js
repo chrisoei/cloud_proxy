@@ -3,12 +3,13 @@
 var crypto = require('crypto');
 var express = require('express');
 var fs = require('fs');
+var gpg = require('gpg');
 var https = require('https');
 var http = require('http');
 
 function mimeType(fn) {
-  if (/\.webp$/.test(fn)) { return 'image/webp'; }
-  if (/\.webm$/.test(fn)) { return 'video/webm'; }
+  if (/\.webp(\.gpg?)$/.test(fn)) { return 'image/webp'; }
+  if (/\.webm(\.gpg?)$/.test(fn)) { return 'video/webm'; }
 }
 
 
@@ -40,6 +41,16 @@ function s3url(options) {
     ].join('');
 };
 
+function sendFile(key, fn, res) {
+    if (/\.gpg$/.test(key)) {
+          gpg.decryptFile(fn, function(err, contents) {
+            res.end(contents);
+          });
+    } else {
+      res.end(fs.readFileSync(fn));
+    }
+}
+
 var app = express();
 
 
@@ -54,8 +65,9 @@ app.get('/:endPoint/:bucket/:key', function(req, res) {
 
   if (fs.existsSync(fn)) {
     console.log("Cache hit: " + path);
-    res.end(fs.readFileSync(fn));
+    sendFile(req.params.key, fn, res);
   } else {
+   
 
   ws = fs.createWriteStream(fn);
 
@@ -81,7 +93,7 @@ app.get('/:endPoint/:bucket/:key', function(req, res) {
 
     proxy_res.on('end', function(d) { 
       ws.end(d, function() {
-        res.end(fs.readFileSync(fn));
+        sendFile(req.params.key, fn, res);
       });
     });
   });
