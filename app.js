@@ -46,13 +46,14 @@ var app = express();
 app.get('/:endPoint/:bucket/:key', function(req, res) {
 
   res.setHeader('Content-Type', mimeType(req.params.key));
+  var path = req.params.bucket + '/' + req.params.key;
 
   var sha256 = crypto.createHash('sha256');
-  sha256.write(req.params.bucket + '/' + req.params.key);
+  sha256.write(path);
   var fn = '/Users/c/.cache/s3proxy/' + sha256.digest('hex'); 
 
   if (fs.existsSync(fn)) {
-    console.log("Cache hit");
+    console.log("Cache hit: " + path);
     res.end(fs.readFileSync(fn));
   } else {
 
@@ -66,7 +67,7 @@ app.get('/:endPoint/:bucket/:key', function(req, res) {
     expires: 3600
   });
 
-  console.log('Requesting from s3: ' + url);
+  console.log('Requesting from s3: ' + path);
   https.get({
     host: "s3-" + req.params.endPoint + ".amazonaws.com",
     path: url,
@@ -75,7 +76,6 @@ app.get('/:endPoint/:bucket/:key', function(req, res) {
     console.log("Got response from s3: " + proxy_res.statusCode);
 
     proxy_res.on('data', function(d) {
-      console.log("Got data with length " + d.length);
       ws.write(d);
     });
 
