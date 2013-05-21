@@ -111,5 +111,11 @@ app.get('/:endPoint/:bucket/:key', function(req, res) {
     });
 });
 
-app.listen(4000);
+
+https.createServer({
+    key: fs.readFileSync('/Users/c/Keys/s3proxy/server.key'),
+    cert: fs.readFileSync('/Users/c/Keys/s3proxy/server.crt')
+}, app).listen(4000);
+//http.createServer(app).listen(4001);
+
 console.log('Listening on port 4000');
