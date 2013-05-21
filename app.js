@@ -42,18 +42,19 @@ function s3url(options) {
       '&Expires=', expires,
       '&Signature=', signature
     ].join('');
-};
+}
 
 function sendFile(key, fn, res) {
+    var setAndSend = function(contents) {
+        res.setHeader('Content-Length', contents.length);
+        res.end(contents);
+    };
     if (/\.gpg$/.test(key)) {
-          gpg.decryptFile(fn, function(err, contents) {
-            res.setHeader('Content-Length', contents.length);
-            res.end(contents);
-          });
+      gpg.decryptFile(fn, function(err, contents) {
+        setAndSend(contents);
+      });
     } else {
-      var contents = fs.readFileSync(fn);
-      res.setHeader('Content-Length', contents.length);
-      res.end(contents);
+        setAndSend(fs.readFileSync(fn));
     }
 }
 
@@ -69,13 +70,13 @@ app.get('/:endPoint/:bucket/:key', function(req, res) {
 
   var sha256 = crypto.createHash('sha256');
   sha256.write(path);
-  var fn = '/Users/c/.cache/s3proxy/' + sha256.digest('hex'); 
+  var fn = '/Users/c/.cache/s3proxy/' + sha256.digest('hex');
 
   if (fs.existsSync(fn)) {
     console.log("Cache hit: " + path);
     sendFile(req.params.key, fn, res);
   } else {
-   
+
 
   ws = fs.createWriteStream(fn);
 
@@ -90,7 +91,7 @@ app.get('/:endPoint/:bucket/:key', function(req, res) {
   console.log('Requesting from s3: ' + path);
   https.get({
     host: "s3-" + req.params.endPoint + ".amazonaws.com",
-    path: url,
+    path: url
 
   }, function(proxy_res) {
     console.log("Got response from s3: " + proxy_res.statusCode);
@@ -99,7 +100,7 @@ app.get('/:endPoint/:bucket/:key', function(req, res) {
       ws.write(d);
     });
 
-    proxy_res.on('end', function(d) { 
+    proxy_res.on('end', function(d) {
       ws.end(d, function() {
         sendFile(req.params.key, fn, res);
       });
