@@ -59,14 +59,14 @@ function sendFile(key, fn, res) {
 var app = express();
 
 
-app.get('/:endPoint/:bucket/:key', function(req, res) {
+app.get(/^\/([^\/]+)\/([^\/]+)\/(.+)$/, function(req, res) {
 
     console.log("Got request from ", req.connection.remoteAddress);
 
-    mimeType(req.params.key, function(err, mt) {
+    mimeType(req.params[2], function(err, mt) {
 
         res.setHeader('Content-Type', mt);
-        var path = req.params.bucket + '/' + req.params.key;
+        var path = req.params[1] + '/' + req.params[2];
 
         var sha256 = crypto.createHash('sha256');
         sha256.write(path);
@@ -74,15 +74,15 @@ app.get('/:endPoint/:bucket/:key', function(req, res) {
 
         if (fs.existsSync(fn)) {
             console.log("Cache hit: " + path + " = " + fn);
-            sendFile(req.params.key, fn, res);
+            sendFile(req.params[2], fn, res);
         } else {
 
 
             ws = fs.createWriteStream(fn);
 
             var url = s3url({
-                bucket: req.params.bucket,
-                key: req.params.key,
+                bucket: req.params[1],
+                key: req.params[2],
                 awsId: process.env.AWS_ACCESS_KEY_ID,
                 awsKey: process.env.AWS_SECRET_ACCESS_KEY,
                 expires: 3600
@@ -90,7 +90,7 @@ app.get('/:endPoint/:bucket/:key', function(req, res) {
 
             console.log('Requesting from s3: ' + path);
             https.get({
-                host: "s3-" + req.params.endPoint + ".amazonaws.com",
+                host: "s3-" + req.params[0] + ".amazonaws.com",
                 path: url
 
             }, function(proxy_res) {
@@ -102,7 +102,7 @@ app.get('/:endPoint/:bucket/:key', function(req, res) {
 
                 proxy_res.on('end', function(d) {
                     ws.end(d, function() {
-                        sendFile(req.params.key, fn, res);
+                        sendFile(req.params[2], fn, res);
                     });
                 });
             });
