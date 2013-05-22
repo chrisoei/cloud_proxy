@@ -73,7 +73,7 @@ app.get('/:endPoint/:bucket/:key', function(req, res) {
         var fn = '/Users/c/.cache/s3proxy/' + sha256.digest('hex');
 
         if (fs.existsSync(fn)) {
-            console.log("Cache hit: " + path);
+            console.log("Cache hit: " + path + " = " + fn);
             sendFile(req.params.key, fn, res);
         } else {
 
