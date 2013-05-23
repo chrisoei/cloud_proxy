@@ -78,7 +78,7 @@ app.get(/^\/([^\/]+)\/([^\/]+)\/(.+)$/, function(req, res) {
         } else {
 
 
-            ws = fs.createWriteStream(fn);
+            var ws = fs.createWriteStream(fn);
 
             var url = s3url({
                 bucket: req.params[1],
