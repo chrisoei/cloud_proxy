@@ -13,6 +13,18 @@ function mimeType(fn, callback) {
     redis.hget('io.oei:mime-types', ext, callback);
 }
 
+function parseRequest(req, callback) {
+    var region = req.params[0];
+    var bucket = req.params[1];
+    var key = req.params[2];
+    var path = bucket + '/' + key;
+    var sha256 = crypto.createHash('sha256');
+
+    sha256.write(path);
+    var filename = '/Users/c/.cache/s3proxy/' + sha256.digest('hex');
+
+  callback(region, bucket, key, path, filename);
+}
 
 function s3url(options) {
 
@@ -61,56 +73,60 @@ var app = express();
 
 app.get(/^\/([^\/]+)\/([^\/]+)\/(.+)$/, function(req, res) {
 
-    console.log("Got request from ", req.connection.remoteAddress);
+    parseRequest(req, function(region, bucket, key, path, filename) {
 
-    mimeType(req.params[2], function(err, mt) {
+        console.log("Got request from ", req.connection.remoteAddress);
 
-        res.setHeader('Content-Type', mt);
-        var path = req.params[1] + '/' + req.params[2];
+        mimeType(key, function(err, mt) {
 
-        var sha256 = crypto.createHash('sha256');
-        sha256.write(path);
-        var fn = '/Users/c/.cache/s3proxy/' + sha256.digest('hex');
+            res.setHeader('Content-Type', mt);
 
-        if (fs.existsSync(fn)) {
-            console.log("Cache hit: " + path + " = " + fn);
-            sendFile(req.params[2], fn, res);
-        } else {
+            if (fs.existsSync(filename)) {
+                console.log("Cache hit: " + path + " = " + filename);
+                sendFile(key, filename, res);
+            } else {
 
+                var ws = fs.createWriteStream(filename);
 
-            var ws = fs.createWriteStream(fn);
-
-            var url = s3url({
-                bucket: req.params[1],
-                key: req.params[2],
-                awsId: process.env.AWS_ACCESS_KEY_ID,
-                awsKey: process.env.AWS_SECRET_ACCESS_KEY,
-                expires: 3600
-            });
-
-            console.log('Requesting from s3: ' + path);
-            https.get({
-                host: "s3-" + req.params[0] + ".amazonaws.com",
-                path: url
-
-            }, function(proxy_res) {
-                console.log("Got response from s3: " + proxy_res.statusCode);
-
-                proxy_res.on('data', function(d) {
-                    ws.write(d);
+                var url = s3url({
+                    bucket: bucket,
+                    key: key,
+                    awsId: process.env.AWS_ACCESS_KEY_ID,
+                    awsKey: process.env.AWS_SECRET_ACCESS_KEY,
+                    expires: 3600
                 });
 
-                proxy_res.on('end', function(d) {
-                    ws.end(d, function() {
-                        sendFile(req.params[2], fn, res);
+                console.log('Requesting from s3: ' + path);
+
+                https.get({
+                    host: "s3-" + region + ".amazonaws.com",
+                    path: url
+
+                }, function(proxy_res) {
+                    console.log("Got response from s3: " + proxy_res.statusCode);
+
+                    proxy_res.on('data', function(d) {
+                        ws.write(d);
+                    });
+
+                    proxy_res.on('end', function(d) {
+                        ws.end(d, function() {
+                            sendFile(key, filename, res);
+                        });
                     });
                 });
-            });
-
-        }
+            }
+        });
     });
 });
 
+app.delete(/^\/([^\/]+)\/([^\/]+)\/(.+)$/, function(req, res) {
+    parseRequest(req, function(region, bucket, key, path, filename) {
+        console.log("Got delete ", path);
+        fs.unlink(filename);
+        res.end();
+    });
+});
 
 https.createServer({
     key: fs.readFileSync('/Users/c/Keys/s3proxy/server.key'),
