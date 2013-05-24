@@ -9,8 +9,10 @@ var http = require('http');
 var redis = require('redis').createClient();
 
 function mimeType(fn, callback) {
-    var ext = /\.(\w+)(\.gpg)?$/.exec(fn)[1];
-    redis.hget('io.oei:mime-types', ext, callback);
+    var match = /\.(\w+)(\.gpg)?$/.exec(fn);
+    match ?
+        redis.hget('io.oei:mime-types', match[1], callback) :
+        callback('text/html');
 }
 
 function parseRequest(req, callback) {
