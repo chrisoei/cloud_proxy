@@ -5,6 +5,7 @@ var exec = require('child_process').exec;
 var express = require('express');
 var fs = require('fs');
 var gpg = require('gpg');
+var growl = require('growl');
 var https = require('https');
 var http = require('http');
 var redis = require('redis').createClient();
@@ -127,11 +128,13 @@ app.get(/^\/([^\/]+)\/([^\/]+)\/(.+)$/, function(req, res) {
                     } else {
                         res.statusCode = proxy_res.statusCode;
                         res.end();
+                        growl("ERROR (" + proxy_res.statusCode + ") " +
+                            path, { title: 's3proxy' });
                     }
 
                 }).on('error', function(error) {
                     console.error("error: ", error);
-                    exec("growlnotify s3proxy -m 'ERROR " + path + "'")
+                    growl("ERROR " + path, { title: 's3proxy' });
                 });
             }
         });
@@ -142,7 +145,7 @@ app.delete(/^\/([^\/]+)\/([^\/]+)\/(.+)$/, function(req, res) {
     parseRequest(req, function(region, bucket, key, path, filename) {
         console.log("Got delete ", path);
         fs.unlink(filename, function() {
-          exec("growlnotify s3proxy -m 'DELETE " + path + "'")
+            growl("DELETE " + path, { title: 's3proxy' });
         });
         res.end();
     });
