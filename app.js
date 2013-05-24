@@ -88,8 +88,6 @@ app.get(/^\/([^\/]+)\/([^\/]+)\/(.+)$/, function(req, res) {
                 sendFile(key, filename, res);
             } else {
 
-                var ws = fs.createWriteStream(filename);
-
                 var url = s3url({
                     bucket: bucket,
                     key: key,
@@ -107,16 +105,30 @@ app.get(/^\/([^\/]+)\/([^\/]+)\/(.+)$/, function(req, res) {
                 }, function(proxy_res) {
                     console.log("Got response from s3: " + proxy_res.statusCode);
 
-                    proxy_res.on('data', function(d) {
-                        ws.write(d);
-                    });
+                    if (proxy_res.statusCode === 200) {
+                        var ws = fs.createWriteStream(filename);
 
-                    proxy_res.on('end', function(d) {
-                        ws.end(d, function() {
-                            sendFile(key, filename, res);
+                        proxy_res.on('data', function(d) {
+                            ws.write(d);
                         });
-                    });
-                });
+
+                        proxy_res.on('error', function() {
+                            ws.end(null, function() {
+                                fs.unlink(filename);
+                           });
+                        });
+
+                        proxy_res.on('end', function(d) {
+                            ws.end(d, function() {
+                                sendFile(key, filename, res);
+                            });
+                        });
+                    } else {
+                        res.statusCode = proxy_res.statusCode;
+                        res.end();
+                    }
+
+                }).on('error', function(error) { console.error("error: ", error);});
             }
         });
     });
