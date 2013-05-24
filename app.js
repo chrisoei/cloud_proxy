@@ -79,7 +79,12 @@ app.get(/^\/([^\/]+)\/([^\/]+)\/(.+)$/, function(req, res) {
 
     parseRequest(req, function(region, bucket, key, path, filename) {
 
-        console.log("Got request from ", req.connection.remoteAddress);
+        var remoteAddress = req.connection.remoteAddress;
+        console.log("Got request from ", remoteAddress);
+        if (remoteAddress !== '127.0.0.1') {
+            growl(remoteAddress + " GET " +path, { title: 's3proxy' });
+        }
+
 
         mimeType(key, function(err, mt) {
 
