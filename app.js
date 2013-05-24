@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 var crypto = require('crypto');
+var exec = require('child_process').exec;
 var express = require('express');
 var fs = require('fs');
 var gpg = require('gpg');
@@ -128,7 +129,10 @@ app.get(/^\/([^\/]+)\/([^\/]+)\/(.+)$/, function(req, res) {
                         res.end();
                     }
 
-                }).on('error', function(error) { console.error("error: ", error);});
+                }).on('error', function(error) {
+                    console.error("error: ", error);
+                    exec("growlnotify s3proxy -m 'ERROR " + path + "'")
+                });
             }
         });
     });
@@ -137,7 +141,9 @@ app.get(/^\/([^\/]+)\/([^\/]+)\/(.+)$/, function(req, res) {
 app.delete(/^\/([^\/]+)\/([^\/]+)\/(.+)$/, function(req, res) {
     parseRequest(req, function(region, bucket, key, path, filename) {
         console.log("Got delete ", path);
-        fs.unlink(filename);
+        fs.unlink(filename, function() {
+          exec("growlnotify s3proxy -m 'DELETE " + path + "'")
+        });
         res.end();
     });
 });
