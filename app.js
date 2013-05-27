@@ -167,7 +167,7 @@ var redis = require('redis').createClient();
             fs.unlink(job.filename, function() {
                 S3Proxy.notify("DELETE " + job.path);
             });
-            job.ressponse.end();
+            job.response.end();
         });
     });
 
