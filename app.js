@@ -28,7 +28,9 @@ var redis = require('redis').createClient();
     };
 
     S3Proxy.notify = function(s) {
-        growl(s, { title: 'S3proxy' });
+        growl(s, {
+            title: 'S3proxy'
+        });
     };
 
     S3Proxy.parseRequest = function(request, response, callback) {
@@ -60,12 +62,13 @@ var redis = require('redis').createClient();
         hmac.write(stringToSign);
         var signature = encodeURIComponent(hmac.digest('base64'));
         return job.url = [
-            '/',
+                '/',
             job.bucket, '/',
             job.key,
-            '?AWSAccessKeyId=', S3Proxy.awsId,
-            '&Expires=', expires,
-            '&Signature=', signature].join('');
+                '?AWSAccessKeyId=', S3Proxy.awsId,
+                '&Expires=', expires,
+                '&Signature=', signature
+        ].join('');
     };
 
     S3Proxy.sendFile = function(job) {
@@ -124,13 +127,12 @@ var redis = require('redis').createClient();
             console.log('Requesting from s3: ' + job.path);
 
             https.get({
-                 host: job.host,
-                 path: job.url
-                }, function(proxy_res) {
-                    job.proxy_res = proxy_res;
-                    S3Proxy.processS3Response(job);
-                }
-            ).on('error', function(error) {
+                host: job.host,
+                path: job.url
+            }, function(proxy_res) {
+                job.proxy_res = proxy_res;
+                S3Proxy.processS3Response(job);
+            }).on('error', function(error) {
                 console.error("error: ", error);
                 job.response.statusCode = 404;
                 job.response.end();
@@ -148,7 +150,7 @@ var redis = require('redis').createClient();
             var remoteAddress = req.connection.remoteAddress;
             console.log("Got request from ", remoteAddress);
             if (remoteAddress !== '127.0.0.1') {
-                S3Proxy.notify(remoteAddress + " GET " +path);
+                S3Proxy.notify(remoteAddress + " GET " + path);
             }
 
             S3Proxy.mimeType(job.key, function(err, mt) {
