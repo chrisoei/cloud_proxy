@@ -76,16 +76,16 @@ var redis = require('redis').createClient();
         if (/\.gpg$/.test(job.key)) {
             gpg.decryptFile(job.filename, function(err, contents) {
                 job.contents = contents;
-                S3Proxy.setAndSend();
+                S3Proxy.setAndSend(job);
             });
         } else {
             job.contents = fs.readFileSync(job.filename);
-            S3Proxy.setAndSend();
+            S3Proxy.setAndSend(job);
         }
     };
 
-    S3Proxy.setAndSend = function(contents) {
-        job.contents = (job.contents === undefined) ? '' : contents;
+    S3Proxy.setAndSend = function(job) {
+        job.contents = (job.contents === undefined) ? '' : job.contents;
         job.response.setHeader('Content-Length', job.contents.length);
         job.response.end(job.contents);
     };
