@@ -123,7 +123,7 @@ var redis = require('redis').createClient();
             console.log('Requesting from s3: ' + job.path);
 
             https.get({
-                 host: "s3-" + job.region + ".amazonaws.com",
+                 host: job.host,
                  path: job.url
                 }, function(proxy_res) {
                     job.proxy_res = proxy_res;
