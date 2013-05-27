@@ -80,7 +80,7 @@ var redis = require('redis').createClient();
             });
         } else {
             job.contents = fs.readFileSync(job.filename);
-            setAndSend();
+            S3Proxy.setAndSend();
         }
     };
 
