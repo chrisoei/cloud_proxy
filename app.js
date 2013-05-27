@@ -131,7 +131,8 @@ var redis = require('redis').createClient();
                 }
             ).on('error', function(error) {
                 console.error("error: ", error);
-                S3Proxy.notify("ERROR " + path);
+                ws.end();
+                S3Proxy.notify("ERROR " + job.path);
             });
         }
     };
