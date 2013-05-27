@@ -27,6 +27,10 @@ var redis = require('redis').createClient();
             callback(S3Proxy.defaultMimeType);
     };
 
+    S3Proxy.notify = function(s) {
+        growl(s, { title: 'S3proxy' });
+    };
+
     S3Proxy.parseRequest = function(request, response, callback) {
         job = {
             request: request,
@@ -103,8 +107,8 @@ var redis = require('redis').createClient();
         } else {
             job.response.statusCode = job.proxy_response.statusCode;
             job.response.end();
-            growl("ERROR (" + job.proxy_response.statusCode + ") " +
-                path, { title: 's3proxy' });
+            S3Proxy.notify("ERROR (" + job.proxy_response.statusCode + ") " +
+                path);
         }
     };
 
@@ -127,7 +131,7 @@ var redis = require('redis').createClient();
                 }
             ).on('error', function(error) {
                 console.error("error: ", error);
-                growl("ERROR " + path, { title: 's3proxy' });
+                S3Proxy.notify("ERROR " + path);
             });
         }
     };
@@ -141,7 +145,7 @@ var redis = require('redis').createClient();
             var remoteAddress = req.connection.remoteAddress;
             console.log("Got request from ", remoteAddress);
             if (remoteAddress !== '127.0.0.1') {
-                growl(remoteAddress + " GET " +path, { title: 's3proxy' });
+                S3Proxy.notify(remoteAddress + " GET " +path);
             }
 
             S3Proxy.mimeType(job.key, function(err, mt) {
@@ -155,7 +159,7 @@ var redis = require('redis').createClient();
         parseRequest(req, res, function(job) {
             console.log("Got delete ", job.path);
             fs.unlink(job.filename, function() {
-                growl("DELETE " + job.path, { title: 's3proxy' });
+                S3Proxy.notify("DELETE " + job.path);
             });
             job.ressponse.end();
         });
