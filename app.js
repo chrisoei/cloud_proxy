@@ -19,6 +19,7 @@ var redis = require('redis').createClient();
     S3Proxy.port = 4000;
     S3Proxy.serverKeyFile = process.env.S3PROXY_SERVER_KEY;
     S3Proxy.serverCertificateFile = process.env.S3PROXY_SERVER_CERTIFICATE;
+    S3Proxy.urlRegexp = /^\/([^\/]+)\/([^\/]+)\/(.+)$/;
 
     S3Proxy.mimeType = function(fn, callback) {
         var match = /\.(\w+)(\.gpg)?$/.exec(fn);
@@ -143,7 +144,7 @@ var redis = require('redis').createClient();
 
     S3Proxy.app = express();
 
-    S3Proxy.app.get(/^\/([^\/]+)\/([^\/]+)\/(.+)$/, function(req, res) {
+    S3Proxy.app.get(S3Proxy.urlRegexp, function(req, res) {
 
         S3Proxy.parseRequest(req, res, function(job) {
 
@@ -160,7 +161,7 @@ var redis = require('redis').createClient();
         });
     });
 
-    S3Proxy.app.delete(/^\/([^\/]+)\/([^\/]+)\/(.+)$/, function(req, res) {
+    S3Proxy.app.delete(S3Proxy.urlRegexp, function(req, res) {
         parseRequest(req, res, function(job) {
             console.log("Got delete ", job.path);
             fs.unlink(job.filename, function() {
