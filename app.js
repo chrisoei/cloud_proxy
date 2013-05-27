@@ -165,7 +165,7 @@ var redis = require('redis').createClient();
         });
     });
 
-})(S3Proxy = {});
+})(S3Proxy = typeof S3Proxy == 'undefined' ? {} : S3Proxy);
 
 if (!S3Proxy.cacheDir) {
     console.error("Must set S3PROXY_CACHE_DIR");
