@@ -73,18 +73,21 @@ var redis = require('redis').createClient();
     };
 
     S3Proxy.sendFile = function(job) {
-        var setAndSend = function(contents) {
-            job.contents = (contents === undefined) ? '' : contents;
-            job.response.setHeader('Content-Length', job.contents.length);
-            job.response.end(job.contents);
-        };
         if (/\.gpg$/.test(job.key)) {
             gpg.decryptFile(job.filename, function(err, contents) {
-                setAndSend(contents);
+                job.contents = contents;
+                S3Proxy.setAndSend();
             });
         } else {
-            setAndSend(fs.readFileSync(job.filename));
+            job.contents = fs.readFileSync(job.filename);
+            setAndSend();
         }
+    };
+
+    S3Proxy.setAndSend = function(contents) {
+        job.contents = (job.contents === undefined) ? '' : contents;
+        job.response.setHeader('Content-Length', job.contents.length);
+        job.response.end(job.contents);
     };
 
     S3Proxy.processS3Response = function(job) {
@@ -193,4 +196,4 @@ https.createServer({
     cert: fs.readFileSync(S3Proxy.serverCertificateFile)
 }, S3Proxy.app).listen(S3Proxy.port);
 
-console.log('Listening on port ' + S3Proxy.port);
+S3Proxy.notify('Listening on port ' + S3Proxy.port);
