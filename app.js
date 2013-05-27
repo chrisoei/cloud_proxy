@@ -7,7 +7,6 @@ var fs = require('fs');
 var gpg = require('gpg');
 var growl = require('growl');
 var https = require('https');
-var http = require('http');
 var redis = require('redis').createClient();
 
 (function(S3Proxy) {
