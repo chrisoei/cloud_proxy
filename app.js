@@ -14,6 +14,7 @@ var redis = require('redis').createClient();
     S3Proxy.defaultMimeType = 'text/html';
     S3Proxy.awsId = process.env.AWS_ACCESS_KEY_ID;
     S3Proxy.awsKey = process.env.AWS_SECRET_ACCESS_KEY;
+    S3Proxy.cacheDir = process.env.S3PROXY_CACHE_DIR
     S3Proxy.defaultExpiration = 3600;
     S3Proxy.port = 4000;
     S3Proxy.serverKeyFile = process.env.S3PROXY_SERVER_KEY;
@@ -41,7 +42,7 @@ var redis = require('redis').createClient();
         job.path = job.bucket + '/' + job.key;
         var sha256 = crypto.createHash('sha256');
         sha256.write(job.path);
-        job.filename = '/Users/c/.cache/s3proxy/' + sha256.digest('hex');
+        job.filename = S3Proxy.cacheDir + '/' + sha256.digest('hex');
         callback(job);
     };
 
@@ -165,6 +166,16 @@ var redis = require('redis').createClient();
     });
 
 })(S3Proxy = {});
+
+if (!S3Proxy.cacheDir) {
+    console.error("Must set S3PROXY_CACHE_DIR");
+    process.exit(1);
+}
+
+if (!(S3Proxy.awsId && S3Proxy.awsKey)) {
+    console.error("Must set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY");
+    process.exit(1);
+}
 
 if (!(S3Proxy.serverKeyFile && S3Proxy.serverCertificateFile)) {
     console.error("Must set S3PROXY_SERVER_KEY and S3PROXY_SERVER_CERTIFICATE");
