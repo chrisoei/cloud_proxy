@@ -72,6 +72,35 @@ function sendFile(key, fn, res) {
     }
 }
 
+function processResponse(proxy_res, key, filename, res) {
+    console.log("Got response from s3: " + proxy_res.statusCode);
+
+    if (proxy_res.statusCode === 200) {
+        var ws = fs.createWriteStream(filename);
+
+        proxy_res.on('data', function(d) {
+            ws.write(d);
+        });
+
+        proxy_res.on('error', function() {
+            ws.end(null, function() {
+                fs.unlink(filename);
+           });
+        });
+
+        proxy_res.on('end', function(d) {
+            ws.end(d, function() {
+                sendFile(key, filename, res);
+            });
+        });
+    } else {
+        res.statusCode = proxy_res.statusCode;
+        res.end();
+        growl("ERROR (" + proxy_res.statusCode + ") " +
+            path, { title: 's3proxy' });
+    }
+}
+
 var app = express();
 
 
@@ -106,38 +135,12 @@ app.get(/^\/([^\/]+)\/([^\/]+)\/(.+)$/, function(req, res) {
                 console.log('Requesting from s3: ' + path);
 
                 https.get({
-                    host: "s3-" + region + ".amazonaws.com",
-                    path: url
-
-                }, function(proxy_res) {
-                    console.log("Got response from s3: " + proxy_res.statusCode);
-
-                    if (proxy_res.statusCode === 200) {
-                        var ws = fs.createWriteStream(filename);
-
-                        proxy_res.on('data', function(d) {
-                            ws.write(d);
-                        });
-
-                        proxy_res.on('error', function() {
-                            ws.end(null, function() {
-                                fs.unlink(filename);
-                           });
-                        });
-
-                        proxy_res.on('end', function(d) {
-                            ws.end(d, function() {
-                                sendFile(key, filename, res);
-                            });
-                        });
-                    } else {
-                        res.statusCode = proxy_res.statusCode;
-                        res.end();
-                        growl("ERROR (" + proxy_res.statusCode + ") " +
-                            path, { title: 's3proxy' });
+                     host: "s3-" + region + ".amazonaws.com",
+                     path: url
+                    }, function(proxy_res) {
+                        processResponse(proxy_res, key, filename, res)
                     }
-
-                }).on('error', function(error) {
+                ).on('error', function(error) {
                     console.error("error: ", error);
                     growl("ERROR " + path, { title: 's3proxy' });
                 });
