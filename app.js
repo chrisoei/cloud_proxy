@@ -94,9 +94,10 @@ var redis = require('redis').createClient();
             });
 
             job.proxy_res.on('error', function() {
-                ws.end(null, function() {
+                console.error("In-transit error");
+                ws.end(function() {
                     fs.unlink(job.filename);
-               });
+                });
             });
 
             job.proxy_res.on('end', function(d) {
@@ -131,7 +132,8 @@ var redis = require('redis').createClient();
                 }
             ).on('error', function(error) {
                 console.error("error: ", error);
-                ws.end();
+                job.response.statusCode = 404;
+                job.response.end();
                 S3Proxy.notify("ERROR " + job.path);
             });
         }
