@@ -10,159 +10,167 @@ var https = require('https');
 var http = require('http');
 var redis = require('redis').createClient();
 
-function mimeType(fn, callback) {
-    var match = /\.(\w+)(\.gpg)?$/.exec(fn);
-    match ?
-        redis.hget('io.oei:mime-types', match[1], callback) :
-        callback('text/html');
-}
+(function(S3Proxy) {
 
-function parseRequest(req, callback) {
-    var region = req.params[0];
-    var bucket = req.params[1];
-    var key = req.params[2];
-    var path = bucket + '/' + key;
-    var sha256 = crypto.createHash('sha256');
+    S3Proxy.defaultMimeType = 'text/html';
+    S3Proxy.awsId = process.env.AWS_ACCESS_KEY_ID;
+    S3Proxy.awsKey = process.env.AWS_SECRET_ACCESS_KEY;
+    S3Proxy.defaultExpiration = 3600;
+    S3Proxy.port = 4000;
+    S3Proxy.serverKeyFile = process.env.S3PROXY_SERVER_KEY;
+    S3Proxy.serverCertificateFile = process.env.S3PROXY_SERVER_CERTIFICATE;
 
-    sha256.write(path);
-    var filename = '/Users/c/.cache/s3proxy/' + sha256.digest('hex');
-
-  callback(region, bucket, key, path, filename);
-}
-
-function s3url(options) {
-
-    var expires = ((new Date()).getTime() / 1000 + options.expires).toFixed(0);
-
-    var stringToSign = [
-            'GET',
-            '',
-            '',
-        expires,
-            '/' + options.bucket + '/' + options.key
-    ].join("\n");
-
-    var hmac = crypto.createHmac('sha1', options.awsKey);
-
-    hmac.write(stringToSign);
-
-    var signature = encodeURIComponent(hmac.digest('base64'));
-
-    return [
-        '/',
-        options.bucket, '/',
-        options.key,
-        '?AWSAccessKeyId=', options.awsId,
-        '&Expires=', expires,
-        '&Signature=', signature].join('');
-}
-
-function sendFile(key, fn, res) {
-    var setAndSend = function(contents) {
-        contents = (contents === undefined) ? '' : contents;
-        res.setHeader('Content-Length', contents.length);
-        res.end(contents);
+    S3Proxy.mimeType = function(fn, callback) {
+        var match = /\.(\w+)(\.gpg)?$/.exec(fn);
+        match ?
+            redis.hget('io.oei:mime-types', match[1], callback) :
+            callback(S3Proxy.defaultMimeType);
     };
-    if (/\.gpg$/.test(key)) {
-        gpg.decryptFile(fn, function(err, contents) {
-            setAndSend(contents);
-        });
-    } else {
-        setAndSend(fs.readFileSync(fn));
-    }
-}
 
-function processResponse(proxy_res, key, filename, res) {
-    console.log("Got response from s3: " + proxy_res.statusCode);
+    S3Proxy.parseRequest = function(request, response, callback) {
+        job = {
+            request: request,
+            response: response
+        };
+        job.region = job.request.params[0];
+        job.bucket = job.request.params[1];
+        job.key = job.request.params[2];
+        job.path = job.bucket + '/' + job.key;
+        var sha256 = crypto.createHash('sha256');
+        sha256.write(job.path);
+        job.filename = '/Users/c/.cache/s3proxy/' + sha256.digest('hex');
+        callback(job);
+    };
 
-    if (proxy_res.statusCode === 200) {
-        var ws = fs.createWriteStream(filename);
+    S3Proxy.s3url = function(job) {
+        job.host = "s3-" + job.region + ".amazonaws.com";
+        var expires = ((new Date()).getTime() / 1000 + S3Proxy.defaultExpiration).toFixed(0);
+        var stringToSign = [
+                'GET',
+                '',
+                '',
+            expires,
+                '/' + job.bucket + '/' + job.key
+        ].join("\n");
+        var hmac = crypto.createHmac('sha1', S3Proxy.awsKey);
+        hmac.write(stringToSign);
+        var signature = encodeURIComponent(hmac.digest('base64'));
+        return job.url = [
+            '/',
+            job.bucket, '/',
+            job.key,
+            '?AWSAccessKeyId=', S3Proxy.awsId,
+            '&Expires=', expires,
+            '&Signature=', signature].join('');
+    };
 
-        proxy_res.on('data', function(d) {
-            ws.write(d);
-        });
+    S3Proxy.sendFile = function(job) {
+        var setAndSend = function(contents) {
+            job.contents = (contents === undefined) ? '' : contents;
+            job.response.setHeader('Content-Length', job.contents.length);
+            job.response.end(job.contents);
+        };
+        if (/\.gpg$/.test(job.key)) {
+            gpg.decryptFile(job.filename, function(err, contents) {
+                setAndSend(contents);
+            });
+        } else {
+            setAndSend(fs.readFileSync(job.filename));
+        }
+    };
 
-        proxy_res.on('error', function() {
-            ws.end(null, function() {
-                fs.unlink(filename);
-           });
-        });
+    S3Proxy.processS3Response = function(job) {
+        console.log("Got response from s3: " + job.proxy_res.statusCode);
 
-        proxy_res.on('end', function(d) {
-            ws.end(d, function() {
-                sendFile(key, filename, res);
+        if (job.proxy_res.statusCode === 200) {
+            var ws = fs.createWriteStream(job.filename);
+
+            job.proxy_res.on('data', function(d) {
+                ws.write(d);
+            });
+
+            job.proxy_res.on('error', function() {
+                ws.end(null, function() {
+                    fs.unlink(job.filename);
+               });
+            });
+
+            job.proxy_res.on('end', function(d) {
+                ws.end(d, function() {
+                    S3Proxy.sendFile(job);
+                });
+            });
+        } else {
+            job.response.statusCode = job.proxy_response.statusCode;
+            job.response.end();
+            growl("ERROR (" + job.proxy_response.statusCode + ") " +
+                path, { title: 's3proxy' });
+        }
+    };
+
+    S3Proxy.sendResponseBody = function(job) {
+        if (fs.existsSync(job.filename)) {
+            console.log("Cache hit: " + job.path + " = " + job.filename);
+            S3Proxy.sendFile(job);
+        } else {
+
+            S3Proxy.s3url(job);
+
+            console.log('Requesting from s3: ' + job.path);
+
+            https.get({
+                 host: "s3-" + job.region + ".amazonaws.com",
+                 path: job.url
+                }, function(proxy_res) {
+                    job.proxy_res = proxy_res;
+                    S3Proxy.processS3Response(job);
+                }
+            ).on('error', function(error) {
+                console.error("error: ", error);
+                growl("ERROR " + path, { title: 's3proxy' });
+            });
+        }
+    };
+
+    S3Proxy.app = express();
+
+    S3Proxy.app.get(/^\/([^\/]+)\/([^\/]+)\/(.+)$/, function(req, res) {
+
+        S3Proxy.parseRequest(req, res, function(job) {
+
+            var remoteAddress = req.connection.remoteAddress;
+            console.log("Got request from ", remoteAddress);
+            if (remoteAddress !== '127.0.0.1') {
+                growl(remoteAddress + " GET " +path, { title: 's3proxy' });
+            }
+
+            S3Proxy.mimeType(job.key, function(err, mt) {
+                job.response.setHeader('Content-Type', mt);
+                S3Proxy.sendResponseBody(job);
             });
         });
-    } else {
-        res.statusCode = proxy_res.statusCode;
-        res.end();
-        growl("ERROR (" + proxy_res.statusCode + ") " +
-            path, { title: 's3proxy' });
-    }
+    });
+
+    S3Proxy.app.delete(/^\/([^\/]+)\/([^\/]+)\/(.+)$/, function(req, res) {
+        parseRequest(req, res, function(job) {
+            console.log("Got delete ", job.path);
+            fs.unlink(job.filename, function() {
+                growl("DELETE " + job.path, { title: 's3proxy' });
+            });
+            job.ressponse.end();
+        });
+    });
+
+})(S3Proxy = {});
+
+if (!(S3Proxy.serverKeyFile && S3Proxy.serverCertificateFile)) {
+    console.error("Must set S3PROXY_SERVER_KEY and S3PROXY_SERVER_CERTIFICATE");
+    process.exit(1);
 }
 
-var app = express();
-
-
-app.get(/^\/([^\/]+)\/([^\/]+)\/(.+)$/, function(req, res) {
-
-    parseRequest(req, function(region, bucket, key, path, filename) {
-
-        var remoteAddress = req.connection.remoteAddress;
-        console.log("Got request from ", remoteAddress);
-        if (remoteAddress !== '127.0.0.1') {
-            growl(remoteAddress + " GET " +path, { title: 's3proxy' });
-        }
-
-
-        mimeType(key, function(err, mt) {
-
-            res.setHeader('Content-Type', mt);
-
-            if (fs.existsSync(filename)) {
-                console.log("Cache hit: " + path + " = " + filename);
-                sendFile(key, filename, res);
-            } else {
-
-                var url = s3url({
-                    bucket: bucket,
-                    key: key,
-                    awsId: process.env.AWS_ACCESS_KEY_ID,
-                    awsKey: process.env.AWS_SECRET_ACCESS_KEY,
-                    expires: 3600
-                });
-
-                console.log('Requesting from s3: ' + path);
-
-                https.get({
-                     host: "s3-" + region + ".amazonaws.com",
-                     path: url
-                    }, function(proxy_res) {
-                        processResponse(proxy_res, key, filename, res)
-                    }
-                ).on('error', function(error) {
-                    console.error("error: ", error);
-                    growl("ERROR " + path, { title: 's3proxy' });
-                });
-            }
-        });
-    });
-});
-
-app.delete(/^\/([^\/]+)\/([^\/]+)\/(.+)$/, function(req, res) {
-    parseRequest(req, function(region, bucket, key, path, filename) {
-        console.log("Got delete ", path);
-        fs.unlink(filename, function() {
-            growl("DELETE " + path, { title: 's3proxy' });
-        });
-        res.end();
-    });
-});
-
 https.createServer({
-    key: fs.readFileSync('/Users/c/Keys/s3proxy/server.key'),
-    cert: fs.readFileSync('/Users/c/Keys/s3proxy/server.crt')
-}, app).listen(4000);
-//http.createServer(app).listen(4001);
+    key: fs.readFileSync(S3Proxy.serverKeyFile),
+    cert: fs.readFileSync(S3Proxy.serverCertificateFile)
+}, S3Proxy.app).listen(S3Proxy.port);
 
-console.log('Listening on port 4000');
+console.log('Listening on port ' + S3Proxy.port);
