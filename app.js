@@ -162,7 +162,7 @@ var redis = require('redis').createClient();
     });
 
     S3Proxy.app.delete(S3Proxy.urlRegexp, function(req, res) {
-        parseRequest(req, res, function(job) {
+        S3Proxy.parseRequest(req, res, function(job) {
             console.log("Got delete ", job.path);
             fs.unlink(job.filename, function() {
                 S3Proxy.notify("DELETE " + job.path);
