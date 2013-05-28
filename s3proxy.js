@@ -137,8 +137,7 @@ var config = require('./config');
         } else {
             job.response.statusCode = 404;;
             job.response.end();
-            S3Proxy.notify("ERROR (" + job.proxy_response.statusCode + ") " +
-                path);
+            S3Proxy.notify("ERROR (" + job.path);
         }
     };
 
@@ -179,7 +178,7 @@ var config = require('./config');
         S3Proxy.parseRequest(req, res, function(job) {
 
             var remoteAddress = req.connection.remoteAddress;
-            logger.info("Got request from ", remoteAddress);
+            logger.info("Got request from " + remoteAddress);
             if (remoteAddress !== '127.0.0.1') {
                 S3Proxy.notify(remoteAddress + " GET " + path);
             }
@@ -193,7 +192,7 @@ var config = require('./config');
 
     S3Proxy.app.delete(config.urlRegexp, function(req, res) {
         S3Proxy.parseRequest(req, res, function(job) {
-            logger.info("Got delete ", job.path);
+            logger.info("Got delete " + job.path);
             fs.unlink(job.filename, function() {
                 S3Proxy.notify("DELETE " + job.path);
             });
