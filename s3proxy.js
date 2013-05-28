@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 
 var crypto = require('crypto');
-var debug = require('./debug');
 var exec = require('child_process').exec;
 var express = require('express');
 var fs = require('fs');
 var gpg = require('gpg');
 var growl = require('growl');
 var https = require('https');
+var logger = require('./logger');
 var redis = require('redis').createClient();
 var spawn = require('child_process').spawn;
 
@@ -76,7 +76,7 @@ var config = require('./config');
     };
 
     S3Proxy.sendEncryptedFile = function(job) {
-        debug.log("Sending encrypted file " + job.filename);
+        logger.debug("Sending encrypted file " + job.filename);
         job.transmitFilename = job.filename + ".tmp";
         if (fs.existsSync(job.transmitFilename)) {
             S3Proxy.sendUnencryptedFile(job);
@@ -89,7 +89,7 @@ var config = require('./config');
     };
 
     S3Proxy.sendUnencryptedFile = function(job) {
-        debug.log("Transmitting file " + job.transmitFilename);
+        logger.debug("Transmitting file " + job.transmitFilename);
         fs.stat(job.transmitFilename, function(err, stats) {
             job.response.setHeader('Content-Length', stats.size);
             fs.createReadStream(job.transmitFilename).pipe(job.response);
@@ -98,20 +98,20 @@ var config = require('./config');
 
     S3Proxy.setAndSend = function(job) {
         job.contents = (job.contents === undefined) ? '' : job.contents;
-        console.log('job.contents.length = ' + job.contents.length);
+        logger.debug('job.contents.length = ' + job.contents.length);
         job.response.setHeader('Content-Length', job.contents.length);
         job.response.end(job.contents);
     };
 
     S3Proxy.processS3Response = function(job) {
-        console.log("Got response from s3: " + job.proxy_res.statusCode);
+        logger.info("Got response from s3: " + job.proxy_res.statusCode);
 
         if (job.proxy_res.statusCode === 200) {
             var ws = fs.createWriteStream(job.filename);
 
             job.proxy_res.on('data', function(d) {
                 ws.write(d);
-                console.log("Received S3 data with length " + d.length);
+                logger.debug("Received S3 data with length " + d.length);
             });
 
             job.proxy_res.on('error', function() {
@@ -129,7 +129,7 @@ var config = require('./config');
             });
 
             job.proxy_res.on('end', function() {
-                console.log("S3 stream ended");
+                logger.debug("S3 stream ended");
                 ws.end(function() {
                     S3Proxy.sendFile(job);
                 });
@@ -144,13 +144,13 @@ var config = require('./config');
 
     S3Proxy.sendResponseBody = function(job) {
         if (fs.existsSync(job.filename)) {
-            console.log("Cache hit: " + job.path + " = " + job.filename);
+            logger.info("Cache hit: " + job.path + " = " + job.filename);
             S3Proxy.sendFile(job);
         } else {
 
             S3Proxy.s3url(job);
 
-            console.log('Requesting from s3: ' + job.path);
+            logger.info('Requesting from s3: ' + job.path);
 
             https.get({
                 host: job.host,
@@ -179,7 +179,7 @@ var config = require('./config');
         S3Proxy.parseRequest(req, res, function(job) {
 
             var remoteAddress = req.connection.remoteAddress;
-            console.log("Got request from ", remoteAddress);
+            logger.info("Got request from ", remoteAddress);
             if (remoteAddress !== '127.0.0.1') {
                 S3Proxy.notify(remoteAddress + " GET " + path);
             }
@@ -193,7 +193,7 @@ var config = require('./config');
 
     S3Proxy.app.delete(config.urlRegexp, function(req, res) {
         S3Proxy.parseRequest(req, res, function(job) {
-            console.log("Got delete ", job.path);
+            logger.info("Got delete ", job.path);
             fs.unlink(job.filename, function() {
                 S3Proxy.notify("DELETE " + job.path);
             });
