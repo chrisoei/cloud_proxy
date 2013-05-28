@@ -5,7 +5,6 @@ var exec = require('child_process').exec;
 var express = require('express');
 var fs = require('fs');
 var gpg = require('gpg');
-var growl = require('growl');
 var https = require('https');
 var logger = require('./logger');
 var redis = require('redis').createClient();
@@ -20,12 +19,6 @@ var config = require('./config');
         match ?
             redis.hget('io.oei:mime-types', match[1], callback) :
             callback(config.defaultMimeType);
-    };
-
-    S3Proxy.notify = function(s) {
-        growl(s, {
-            title: 'S3proxy'
-        });
     };
 
     S3Proxy.parseRequest = function(request, response, callback) {
@@ -137,7 +130,7 @@ var config = require('./config');
         } else {
             job.response.statusCode = 404;;
             job.response.end();
-            S3Proxy.notify("ERROR (" + job.path);
+            logger.error("ERROR (" + job.path);
         }
     };
 
@@ -158,15 +151,15 @@ var config = require('./config');
                 job.proxy_res = proxy_res;
                 S3Proxy.processS3Response(job);
             }).on('close', function() {
-                console.error("connection closed");
+                logger.error("connection closed");
                 job.response.end();
             }).on('timeout', function() {
-                console.error("s3 timeout");
+                logger.error("s3 timeout");
             }).on('error', function(error) {
-                console.error("error: ", error);
+                logger.error("error: " + error);
                 job.response.statusCode = 404;
                 job.response.end();
-                S3Proxy.notify("ERROR " + job.path);
+                logger.error("ERROR " + job.path);
             });
         }
     };
@@ -180,7 +173,7 @@ var config = require('./config');
             var remoteAddress = req.connection.remoteAddress;
             logger.info("Got request from " + remoteAddress);
             if (remoteAddress !== '127.0.0.1') {
-                S3Proxy.notify(remoteAddress + " GET " + path);
+                logger.warn(remoteAddress + " GET " + path);
             }
 
             S3Proxy.mimeType(job.key, function(err, mt) {
@@ -194,7 +187,7 @@ var config = require('./config');
         S3Proxy.parseRequest(req, res, function(job) {
             logger.info("Got delete " + job.path);
             fs.unlink(job.filename, function() {
-                S3Proxy.notify("DELETE " + job.path);
+                logger.warn("DELETE " + job.path);
             });
             fs.exists(job.filename + '.tmp', function(answer) {
                 if (answer) fs.unlink(job.filename + '.tmp');
@@ -210,7 +203,7 @@ var config = require('./config');
                 cert: fs.readFileSync(config.serverCertificateFile)
             }, S3Proxy.app).listen(config.port);
 
-            S3Proxy.notify('Listening on port ' + config.port);
+            logger.warn('Listening on port ' + config.port);
         }
     };
 
