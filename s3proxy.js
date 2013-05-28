@@ -173,7 +173,7 @@ var config = require('./config');
             var remoteAddress = req.connection.remoteAddress;
             logger.info("Got request from " + remoteAddress);
             if (remoteAddress !== '127.0.0.1') {
-                logger.warn(remoteAddress + " GET " + path);
+                logger.warn(remoteAddress + " GET " + job.path);
             }
 
             S3Proxy.mimeType(job.key, function(err, mt) {
