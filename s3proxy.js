@@ -197,6 +197,9 @@ var config = require('./config');
             fs.unlink(job.filename, function() {
                 S3Proxy.notify("DELETE " + job.path);
             });
+            fs.exists(job.filename + '.tmp', function(answer) {
+                if (answer) fs.unlink(job.filename + '.tmp');
+            });
             job.response.end();
         });
     });
