@@ -9,7 +9,7 @@ function notify(s) {
 };
 
 logger.debug = function(s) {
-    console.log(s);
+//    console.log(s);
     return this;
 };
 

@@ -108,14 +108,14 @@ var config = require('./config');
             });
 
             job.proxy_res.on('error', function() {
-                console.error("In-transit error");
+                logger.error("In-transit error");
                 ws.end(function() {
                     fs.unlink(job.filename);
                 });
             });
 
             job.proxy_res.on('close', function() {
-               console.error("S3 closed connection");
+               logger.error("S3 closed connection");
                 ws.end(function() {
                     fs.unlink(job.filename);
                 });
