@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 var crypto = require('crypto');
+var debug = require('./debug');
 var exec = require('child_process').exec;
 var express = require('express');
 var fs = require('fs');
@@ -8,6 +9,7 @@ var gpg = require('gpg');
 var growl = require('growl');
 var https = require('https');
 var redis = require('redis').createClient();
+var spawn = require('child_process').spawn;
 
 var config = require('./config');
 
@@ -66,18 +68,37 @@ var config = require('./config');
 
     S3Proxy.sendFile = function(job) {
         if (/\.gpg$/.test(job.key)) {
-            gpg.decryptFile(job.filename, function(err, contents) {
-                job.contents = contents;
-                S3Proxy.setAndSend(job);
-            });
+            S3Proxy.sendEncryptedFile(job);
         } else {
-            job.contents = fs.readFileSync(job.filename);
-            S3Proxy.setAndSend(job);
+            job.transmitFilename = job.filename;
+            S3Proxy.sendUnencryptedFile(job);
         }
+    };
+
+    S3Proxy.sendEncryptedFile = function(job) {
+        debug.log("Sending encrypted file " + job.filename);
+        job.transmitFilename = job.filename + ".tmp";
+        if (fs.existsSync(job.transmitFilename)) {
+            S3Proxy.sendUnencryptedFile(job);
+        } else {
+            var gpg = spawn('gpg', [  '--output', job.transmitFilename, '--decrypt', job.filename ]);
+            gpg.on('exit', function() {
+                S3Proxy.sendUnencryptedFile(job);
+            });
+        }
+    };
+
+    S3Proxy.sendUnencryptedFile = function(job) {
+        debug.log("Transmitting file " + job.transmitFilename);
+        fs.stat(job.transmitFilename, function(err, stats) {
+            job.response.setHeader('Content-Length', stats.size);
+            fs.createReadStream(job.transmitFilename).pipe(job.response);
+        });
     };
 
     S3Proxy.setAndSend = function(job) {
         job.contents = (job.contents === undefined) ? '' : job.contents;
+        console.log('job.contents.length = ' + job.contents.length);
         job.response.setHeader('Content-Length', job.contents.length);
         job.response.end(job.contents);
     };
@@ -90,6 +111,7 @@ var config = require('./config');
 
             job.proxy_res.on('data', function(d) {
                 ws.write(d);
+                console.log("Received S3 data with length " + d.length);
             });
 
             job.proxy_res.on('error', function() {
@@ -99,13 +121,21 @@ var config = require('./config');
                 });
             });
 
-            job.proxy_res.on('end', function(d) {
-                ws.end(d, function() {
+            job.proxy_res.on('close', function() {
+               console.error("S3 closed connection");
+                ws.end(function() {
+                    fs.unlink(job.filename);
+                });
+            });
+
+            job.proxy_res.on('end', function() {
+                console.log("S3 stream ended");
+                ws.end(function() {
                     S3Proxy.sendFile(job);
                 });
             });
         } else {
-            job.response.statusCode = job.proxy_response.statusCode;
+            job.response.statusCode = 404;;
             job.response.end();
             S3Proxy.notify("ERROR (" + job.proxy_response.statusCode + ") " +
                 path);
@@ -128,6 +158,11 @@ var config = require('./config');
             }, function(proxy_res) {
                 job.proxy_res = proxy_res;
                 S3Proxy.processS3Response(job);
+            }).on('close', function() {
+                console.error("connection closed");
+                job.response.end();
+            }).on('timeout', function() {
+                console.error("s3 timeout");
             }).on('error', function(error) {
                 console.error("error: ", error);
                 job.response.statusCode = 404;
