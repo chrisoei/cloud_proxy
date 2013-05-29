@@ -6,7 +6,7 @@ exports.defaultExpiration = 3600;
 exports.port = 63446;
 exports.serverKeyFile = process.env.S3PROXY_SERVER_KEY;
 exports.serverCertificateFile = process.env.S3PROXY_SERVER_CERTIFICATE;
-exports.urlRegexp = /^\/([^\/]+)\/([^\/]+)\/(.+)$/;
+exports.urlRegexp = /^\/s3\/([^\/]+)\/([^\/]+)\/(.+)$/;
 
 exports.checkConfig = function() {
     if (!exports.cacheDir) {
