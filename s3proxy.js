@@ -1,10 +1,8 @@
 #!/usr/bin/env node
 
 var crypto = require('crypto');
-var exec = require('child_process').exec;
 var express = require('express');
 var fs = require('fs');
-var gpg = require('gpg');
 var https = require('https');
 var logger = require('./logger');
 var redis = require('redis').createClient();
@@ -13,6 +11,7 @@ var spawn = require('child_process').spawn;
 var config = require('./config');
 
 (function(S3Proxy) {
+    'use strict';
 
     S3Proxy.mimeType = function(fn, callback) {
         var match = /\.(\w+)(\.gpg)?$/.exec(fn);
@@ -22,7 +21,7 @@ var config = require('./config');
     };
 
     S3Proxy.parseRequest = function(request, response, callback) {
-        job = {
+        var job = {
             request: request,
             response: response
         };
@@ -43,20 +42,20 @@ var config = require('./config');
                 'GET',
                 '',
                 '',
-            expires,
+                expires,
                 '/' + job.bucket + '/' + job.key
-        ].join("\n");
+            ].join("\n");
         var hmac = crypto.createHmac('sha1', config.awsKey);
         hmac.write(stringToSign);
         var signature = encodeURIComponent(hmac.digest('base64'));
-        return job.url = [
+        job.url = [
                 '/',
-            job.bucket, '/',
-            job.key,
+                job.bucket, '/',
+                job.key,
                 '?AWSAccessKeyId=', config.awsId,
                 '&Expires=', expires,
                 '&Signature=', signature
-        ].join('');
+            ].join('');
     };
 
     S3Proxy.sendFile = function(job) {
@@ -97,38 +96,38 @@ var config = require('./config');
     };
 
     S3Proxy.processS3Response = function(job) {
-        logger.info("Got response from s3: " + job.proxy_res.statusCode);
+        logger.info("Got response from s3: " + job.proxyRes.statusCode);
 
-        if (job.proxy_res.statusCode === 200) {
+        if (job.proxyRes.statusCode === 200) {
             var ws = fs.createWriteStream(job.filename);
 
-            job.proxy_res.on('data', function(d) {
+            job.proxyRes.on('data', function(d) {
                 ws.write(d);
                 logger.debug("Received S3 data with length " + d.length);
             });
 
-            job.proxy_res.on('error', function() {
+            job.proxyRes.on('error', function() {
                 logger.error("In-transit error");
                 ws.end(function() {
                     fs.unlink(job.filename);
                 });
             });
 
-            job.proxy_res.on('close', function() {
-               logger.error("S3 closed connection");
+            job.proxyRes.on('close', function() {
+                logger.error("S3 closed connection");
                 ws.end(function() {
                     fs.unlink(job.filename);
                 });
             });
 
-            job.proxy_res.on('end', function() {
+            job.proxyRes.on('end', function() {
                 logger.debug("S3 stream ended");
                 ws.end(function() {
                     S3Proxy.sendFile(job);
                 });
             });
         } else {
-            job.response.statusCode = 404;;
+            job.response.statusCode = 404;
             job.response.end();
             logger.error("ERROR (" + job.path);
         }
@@ -147,8 +146,8 @@ var config = require('./config');
             https.get({
                 host: job.host,
                 path: job.url
-            }, function(proxy_res) {
-                job.proxy_res = proxy_res;
+            }, function(proxyRes) {
+                job.proxyRes = proxyRes;
                 S3Proxy.processS3Response(job);
             }).on('close', function() {
                 logger.error("connection closed");
@@ -172,7 +171,7 @@ var config = require('./config');
 
             var remoteAddress = req.connection.remoteAddress;
             logger.info("Got request from " + remoteAddress);
-            if (remoteAddress !== '127.0.0.1') {
+            if (remoteAddress !== '192.168.1.102') {
                 logger.warn(remoteAddress + " GET " + job.path);
             }
 
@@ -190,7 +189,7 @@ var config = require('./config');
                 logger.warn("DELETE " + job.path);
             });
             fs.exists(job.filename + '.tmp', function(answer) {
-                if (answer) fs.unlink(job.filename + '.tmp');
+                if (answer) { fs.unlink(job.filename + '.tmp'); }
             });
             job.response.end();
         });
