@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+var _ = require('lodash');
 var crypto = require('crypto');
 var express = require('express');
 var fs = require('fs');
@@ -171,7 +172,7 @@ var config = require('./config');
 
             var remoteAddress = req.connection.remoteAddress;
             logger.info("Got request from " + remoteAddress);
-            if (remoteAddress !== '192.168.1.102') {
+            if (!_.contains([ '127.0.0.1', '192.168.1.102' ], remoteAddress)) {
                 logger.warn(remoteAddress + " GET " + job.path);
             }
 
