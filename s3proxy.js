@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 var _ = require('lodash');
+var cacheFile = require('./cache_file');
 var crypto = require('crypto');
 var express = require('express');
 var fs = require('fs');
@@ -32,7 +33,9 @@ var config = require('./config');
         job.path = job.bucket + '/' + job.key;
         var sha256 = crypto.createHash('sha256');
         sha256.write(job.path);
-        job.filename = config.cacheDir + '/' + sha256.digest('hex');
+        var hexDigest = sha256.digest('hex');
+        var dirs = cacheFile.cacheDir(2)(hexDigest);
+        job.filename = cacheFile.mkpath(config.cacheDir, dirs) + '/' + hexDigest;
         callback(job);
     };
 
