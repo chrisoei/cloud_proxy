@@ -125,7 +125,7 @@ var config = require('./config');
             });
 
             job.proxyRes.on('end', function() {
-                logger.debug("S3 stream ended");
+                logger.info("S3 stream ended");
                 ws.end(function() {
                     S3Proxy.sendFile(job);
                 });
