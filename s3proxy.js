@@ -97,11 +97,22 @@ var config = require('./config');
         }
     };
 
+    function starDate(d) {
+        var y = d.getUTCFullYear();
+        var t0 = Date.UTC(y, 0, 1, 0, 0, 0, 0);
+        var t1 = Date.UTC(y + 1, 0, 1, 0, 0, 0, 0);
+        var t = Date.UTC(y, d.getUTCMonth(), d.getUTCDate(), d.getUTCHours(),
+            d.getUTCMinutes(), d.getUTCSeconds(), d.getUTCMilliseconds());
+        return (y + (t - t0) / (t1 - t0)).toFixed(15);
+    }
+
     S3Proxy.sendUnencryptedFile = function(job) {
         logger.debug("Transmitting file " + job.transmitFilename);
         fs.stat(job.transmitFilename, function(err, stats) {
             job.response.setHeader('X-Cache-File', job.transmitFilename);
             job.response.setHeader('X-Cache-File-Date', stats.mtime.toString());
+            job.response.setHeader('X-Cache-File-Stardate', starDate(stats.mtime));
+
             if (job.verb === 'HEAD') {
                 job.response.setHeader('X-Cache-File-Size', stats.size);
                 S3Proxy.sendEmpty(job, 200);
