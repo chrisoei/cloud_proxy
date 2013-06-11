@@ -98,10 +98,10 @@ var config = require('./config');
     };
 
     S3Proxy.sendUnencryptedFile = function(job) {
-
-        job.response.setHeader('X-Cache-File', job.filename);
         logger.debug("Transmitting file " + job.transmitFilename);
         fs.stat(job.transmitFilename, function(err, stats) {
+            job.response.setHeader('X-Cache-File', job.transmitFilename);
+            job.response.setHeader('X-Cache-File-Date', stats.mtime.toString());
             if (job.verb === 'HEAD') {
                 job.response.setHeader('X-Cache-File-Size', stats.size);
                 S3Proxy.sendEmpty(job, 200);
