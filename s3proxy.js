@@ -76,9 +76,7 @@ var config = require('./config');
     };
 
     S3Proxy.sendFile = function(job) {
-        if (job.verb === 'HEAD') {
-            S3Proxy.sendEmpty(job, 200);
-        } else if (/\.gpg$/.test(job.key)) {
+        if (/\.gpg$/.test(job.key)) {
             S3Proxy.sendEncryptedFile(job);
         } else {
             job.transmitFilename = job.filename;
@@ -100,10 +98,17 @@ var config = require('./config');
     };
 
     S3Proxy.sendUnencryptedFile = function(job) {
+
+        job.response.setHeader('X-Cache-File', job.filename);
         logger.debug("Transmitting file " + job.transmitFilename);
         fs.stat(job.transmitFilename, function(err, stats) {
-            job.response.setHeader('Content-Length', stats.size);
-            fs.createReadStream(job.transmitFilename).pipe(job.response);
+            if (job.verb === 'HEAD') {
+                job.response.setHeader('X-Cache-File-Size', stats.size);
+                S3Proxy.sendEmpty(job, 200);
+            } else {
+                job.response.setHeader('Content-Length', stats.size);
+                fs.createReadStream(job.transmitFilename).pipe(job.response);
+            }
         });
     };
 
