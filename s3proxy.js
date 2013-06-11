@@ -211,4 +211,4 @@ var config = require('./config');
         }
     };
 
-})(exports);
+})(exports = module.exports);
