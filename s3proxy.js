@@ -102,13 +102,6 @@ var config = require('./config');
         });
     };
 
-    S3Proxy.setAndSend = function(job) {
-        job.contents = (job.contents === undefined) ? '' : job.contents;
-        logger.debug('job.contents.length = ' + job.contents.length);
-        job.response.setHeader('Content-Length', job.contents.length);
-        job.response.end(job.contents);
-    };
-
     S3Proxy.processS3Response = function(job) {
         logger.info("Got response from s3: " + job.proxyRes.statusCode);
 
