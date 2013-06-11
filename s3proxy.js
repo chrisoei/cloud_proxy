@@ -128,6 +128,7 @@ var config = require('./config');
                 logger.info("S3 stream ended");
                 ws.end(function() {
                     S3Proxy.sendFile(job);
+                    spawn('meta', [ 'checksum', job.filename ]);
                 });
             });
         } else {
