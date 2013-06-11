@@ -22,10 +22,11 @@ var config = require('./config');
             callback(config.defaultMimeType);
     };
 
-    S3Proxy.parseRequest = function(request, response, callback) {
+    S3Proxy.parseRequest = function(verb, request, response, callback) {
         var job = {
             request: request,
-            response: response
+            response: response,
+            verb: verb
         };
         job.region = job.request.params[0];
         job.bucket = job.request.params[1];
@@ -36,6 +37,12 @@ var config = require('./config');
         var hexDigest = sha256.digest('hex');
         var dirs = cacheFile.cacheDir(2)(hexDigest);
         job.filename = cacheFile.mkpath(config.cacheDir, dirs) + '/' + hexDigest;
+
+        var remoteAddress = request.connection.remoteAddress;
+        logger.info("Got " + verb + " request from " + remoteAddress);
+        if (!_.contains([ '127.0.0.1', '192.168.1.102' ], remoteAddress)) {
+            logger.warn(remoteAddress + " " + verb + " " + job.path);
+        }
         callback(job);
     };
 
@@ -63,7 +70,10 @@ var config = require('./config');
     };
 
     S3Proxy.sendFile = function(job) {
-        if (/\.gpg$/.test(job.key)) {
+        if (job.verb === 'HEAD') {
+            job.response.setHeader('Content-Length', 0);
+            job.response.end();
+        } else if (/\.gpg$/.test(job.key)) {
             S3Proxy.sendEncryptedFile(job);
         } else {
             job.transmitFilename = job.filename;
@@ -172,13 +182,7 @@ var config = require('./config');
 
     S3Proxy.app.get(config.urlRegexp, function(req, res) {
 
-        S3Proxy.parseRequest(req, res, function(job) {
-
-            var remoteAddress = req.connection.remoteAddress;
-            logger.info("Got request from " + remoteAddress);
-            if (!_.contains([ '127.0.0.1', '192.168.1.102' ], remoteAddress)) {
-                logger.warn(remoteAddress + " GET " + job.path);
-            }
+        S3Proxy.parseRequest('GET', req, res, function(job) {
 
             S3Proxy.mimeType(job.key, function(err, mt) {
                 job.response.setHeader('Content-Type', mt);
@@ -187,8 +191,17 @@ var config = require('./config');
         });
     });
 
+    S3Proxy.app.head(config.urlRegexp, function(req, res) {
+
+        S3Proxy.parseRequest('HEAD', req, res, function(job) {
+            job.response.setHeader('Content-Type', 'text/plain');
+            S3Proxy.sendResponseBody(job);
+
+        });
+    });
+
     S3Proxy.app.delete(config.urlRegexp, function(req, res) {
-        S3Proxy.parseRequest(req, res, function(job) {
+        S3Proxy.parseRequest('DELETE', req, res, function(job) {
             logger.info("Got delete " + job.path);
             fs.unlink(job.filename, function() {
                 logger.warn("DELETE " + job.path);
