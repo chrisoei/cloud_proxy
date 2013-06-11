@@ -142,8 +142,8 @@ var config = require('./config');
                 });
             });
         } else {
-            S3Proxy.sendEmpty(job, 404);
-            logger.error("ERROR (" + job.path);
+            S3Proxy.sendEmpty(job, job.proxyRes.statusCode);
+            logger.error("ERROR (" + job.path + ")");
         }
     };
 
