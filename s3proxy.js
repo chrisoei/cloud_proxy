@@ -69,10 +69,15 @@ var config = require('./config');
             ].join('');
     };
 
+    S3Proxy.sendEmpty = function(job, responseCode) {
+        job.response.setHeader('Content-Length', 0);
+        job.response.statusCode = responseCode;
+        job.response.end();
+    };
+
     S3Proxy.sendFile = function(job) {
         if (job.verb === 'HEAD') {
-            job.response.setHeader('Content-Length', 0);
-            job.response.end();
+            S3Proxy.sendEmpty(job, 200);
         } else if (/\.gpg$/.test(job.key)) {
             S3Proxy.sendEncryptedFile(job);
         } else {
@@ -117,6 +122,7 @@ var config = require('./config');
                 logger.error("In-transit error");
                 ws.end(function() {
                     fs.unlink(job.filename);
+                    S3Proxy.sendEmpty(job, 404);
                 });
             });
 
@@ -124,6 +130,7 @@ var config = require('./config');
                 logger.error("S3 closed connection");
                 ws.end(function() {
                     fs.unlink(job.filename);
+                    S3Proxy.sendEmpty(job, 404);
                 });
             });
 
@@ -135,8 +142,7 @@ var config = require('./config');
                 });
             });
         } else {
-            job.response.statusCode = 404;
-            job.response.end();
+            S3Proxy.sendEmpty(job, 404);
             logger.error("ERROR (" + job.path);
         }
     };
@@ -159,13 +165,13 @@ var config = require('./config');
                 S3Proxy.processS3Response(job);
             }).on('close', function() {
                 logger.error("connection closed");
-                job.response.end();
+                S3Proxy.sendEmpty(job, 404);
             }).on('timeout', function() {
+                S3Proxy.sendEmpty(job, 404);
                 logger.error("s3 timeout");
             }).on('error', function(error) {
                 logger.error("error: " + error);
-                job.response.statusCode = 404;
-                job.response.end();
+                S3Proxy.sendEmpty(job, 404);
                 logger.error("ERROR " + job.path);
             });
         }
@@ -202,7 +208,7 @@ var config = require('./config');
             fs.exists(job.filename + '.tmp', function(answer) {
                 if (answer) { fs.unlink(job.filename + '.tmp'); }
             });
-            job.response.end();
+            S3Proxy.sendEmpty(job, 200);
         });
     });
 
