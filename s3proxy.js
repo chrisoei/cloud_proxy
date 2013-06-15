@@ -181,7 +181,6 @@ var config = require('./config');
                 S3Proxy.processS3Response(job);
             }).on('close', function() {
                 logger.error("connection closed");
-                S3Proxy.sendEmpty(job, 404);
             }).on('timeout', function() {
                 S3Proxy.sendEmpty(job, 404);
                 logger.error("s3 timeout");
