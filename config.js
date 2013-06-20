@@ -2,6 +2,7 @@
     'use strict';
 
     config.defaultMimeType = 'text/html';
+    config.authCookie = process.env.S3PROXY_AUTH_COOKIE;
     config.awsId = process.env.AWS_ACCESS_KEY_ID;
     config.awsKey = process.env.AWS_SECRET_ACCESS_KEY;
     config.cacheDir = process.env.S3PROXY_CACHE_DIR;
@@ -12,6 +13,10 @@
     config.urlRegexp = /^\/s3\/([^\/]+)\/([^\/]+)\/(.+)$/;
 
     config.checkConfig = function () {
+        if (!config.authCookie) {
+            console.error("Must set S3PROXY_AUTH_COOKIE");
+            return false;
+        }
         if (!config.cacheDir) {
             console.error("Must set S3PROXY_CACHE_DIR");
             return false;

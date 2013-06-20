@@ -28,6 +28,11 @@ var config = require('./config');
             response: response,
             verb: verb
         };
+
+        if (request.cookies.auth !== config.authCookie) {
+          return false;
+        }
+
         job.region = job.request.params[0];
         job.bucket = job.request.params[1];
         job.key = job.request.params[2];
@@ -193,6 +198,8 @@ var config = require('./config');
     };
 
     S3Proxy.app = express();
+
+    S3Proxy.app.use(express.cookieParser());
 
     S3Proxy.app.get(config.urlRegexp, function(req, res) {
 
