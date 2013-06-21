@@ -1,6 +1,6 @@
 var config = require('../config.js');
 
-describe('S3proxy', function() {
+describe('CloudProxy', function() {
 
     it('should check configuration', function() {
         expect(config.checkConfig()).toEqual(true);

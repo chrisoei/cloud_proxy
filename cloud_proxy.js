@@ -12,17 +12,17 @@ var spawn = require('child_process').spawn;
 
 var config = require('./config');
 
-(function(S3Proxy) {
+(function(CloudProxy) {
     'use strict';
 
-    S3Proxy.mimeType = function(fn, callback) {
+    CloudProxy.mimeType = function(fn, callback) {
         var match = /\.(\w+)(\.gpg)?$/.exec(fn);
         match ?
             redis.hget('io.oei:mime-types', match[1], callback) :
             callback(config.defaultMimeType);
     };
 
-    S3Proxy.parseRequest = function(verb, request, response, callback) {
+    CloudProxy.parseRequest = function(verb, request, response, callback) {
         var job = {
             request: request,
             response: response,
@@ -51,7 +51,7 @@ var config = require('./config');
         callback(job);
     };
 
-    S3Proxy.s3url = function(job) {
+    CloudProxy.s3url = function(job) {
         job.host = "s3-" + job.region + ".amazonaws.com";
         var expires = ((new Date()).getTime() / 1000 + config.defaultExpiration).toFixed(0);
         var stringToSign = [
@@ -74,30 +74,30 @@ var config = require('./config');
             ].join('');
     };
 
-    S3Proxy.sendEmpty = function(job, responseCode) {
+    CloudProxy.sendEmpty = function(job, responseCode) {
         job.response.setHeader('Content-Length', 0);
         job.response.statusCode = responseCode;
         job.response.end();
     };
 
-    S3Proxy.sendFile = function(job) {
+    CloudProxy.sendFile = function(job) {
         if (/\.gpg$/.test(job.key)) {
-            S3Proxy.sendEncryptedFile(job);
+            CloudProxy.sendEncryptedFile(job);
         } else {
             job.transmitFilename = job.filename;
-            S3Proxy.sendUnencryptedFile(job);
+            CloudProxy.sendUnencryptedFile(job);
         }
     };
 
-    S3Proxy.sendEncryptedFile = function(job) {
+    CloudProxy.sendEncryptedFile = function(job) {
         logger.debug("Sending encrypted file " + job.filename);
         job.transmitFilename = job.filename + ".tmp";
         if (fs.existsSync(job.transmitFilename)) {
-            S3Proxy.sendUnencryptedFile(job);
+            CloudProxy.sendUnencryptedFile(job);
         } else {
             var gpg = spawn('gpg', [  '--output', job.transmitFilename, '--decrypt', job.filename ]);
             gpg.on('exit', function() {
-                S3Proxy.sendUnencryptedFile(job);
+                CloudProxy.sendUnencryptedFile(job);
             });
         }
     };
@@ -111,7 +111,7 @@ var config = require('./config');
         return (y + (t - t0) / (t1 - t0)).toFixed(15);
     }
 
-    S3Proxy.sendUnencryptedFile = function(job) {
+    CloudProxy.sendUnencryptedFile = function(job) {
         logger.debug("Transmitting file " + job.transmitFilename);
         fs.stat(job.transmitFilename, function(err, stats) {
             job.response.setHeader('X-Cache-File', job.transmitFilename);
@@ -120,7 +120,7 @@ var config = require('./config');
 
             if (job.verb === 'HEAD') {
                 job.response.setHeader('X-Cache-File-Size', stats.size);
-                S3Proxy.sendEmpty(job, 200);
+                CloudProxy.sendEmpty(job, 200);
             } else {
                 job.response.setHeader('Content-Length', stats.size);
                 fs.createReadStream(job.transmitFilename).pipe(job.response);
@@ -128,7 +128,7 @@ var config = require('./config');
         });
     };
 
-    S3Proxy.processS3Response = function(job) {
+    CloudProxy.processS3Response = function(job) {
         logger.info("Got response from s3: " + job.proxyRes.statusCode);
 
         if (job.proxyRes.statusCode === 200) {
@@ -143,7 +143,7 @@ var config = require('./config');
                 logger.error("In-transit error");
                 ws.end(function() {
                     fs.unlink(job.filename);
-                    S3Proxy.sendEmpty(job, 404);
+                    CloudProxy.sendEmpty(job, 404);
                 });
             });
 
@@ -151,30 +151,30 @@ var config = require('./config');
                 logger.error("S3 closed connection");
                 ws.end(function() {
                     fs.unlink(job.filename);
-                    S3Proxy.sendEmpty(job, 404);
+                    CloudProxy.sendEmpty(job, 404);
                 });
             });
 
             job.proxyRes.on('end', function() {
                 logger.info("S3 stream ended");
                 ws.end(function() {
-                    S3Proxy.sendFile(job);
+                    CloudProxy.sendFile(job);
                     spawn('meta', [ 'checksum', job.filename ]);
                 });
             });
         } else {
-            S3Proxy.sendEmpty(job, job.proxyRes.statusCode);
+            CloudProxy.sendEmpty(job, job.proxyRes.statusCode);
             logger.error("ERROR (" + job.path + ")");
         }
     };
 
-    S3Proxy.sendResponseBody = function(job) {
+    CloudProxy.sendResponseBody = function(job) {
         if (fs.existsSync(job.filename)) {
             logger.info("Cache hit: " + job.path + " = " + job.filename);
-            S3Proxy.sendFile(job);
+            CloudProxy.sendFile(job);
         } else {
 
-            S3Proxy.s3url(job);
+            CloudProxy.s3url(job);
 
             logger.info('Requesting from s3: ' + job.path);
 
@@ -183,46 +183,46 @@ var config = require('./config');
                 path: job.url
             }, function(proxyRes) {
                 job.proxyRes = proxyRes;
-                S3Proxy.processS3Response(job);
+                CloudProxy.processS3Response(job);
             }).on('close', function() {
                 logger.error("connection closed");
             }).on('timeout', function() {
-                S3Proxy.sendEmpty(job, 404);
+                CloudProxy.sendEmpty(job, 404);
                 logger.error("s3 timeout");
             }).on('error', function(error) {
                 logger.error("error: " + error);
-                S3Proxy.sendEmpty(job, 404);
+                CloudProxy.sendEmpty(job, 404);
                 logger.error("ERROR " + job.path);
             });
         }
     };
 
-    S3Proxy.app = express();
+    CloudProxy.app = express();
 
-    S3Proxy.app.use(express.cookieParser());
+    CloudProxy.app.use(express.cookieParser());
 
-    S3Proxy.app.get(config.urlRegexp, function(req, res) {
+    CloudProxy.app.get(config.urlRegexp, function(req, res) {
 
-        S3Proxy.parseRequest('GET', req, res, function(job) {
+        CloudProxy.parseRequest('GET', req, res, function(job) {
 
-            S3Proxy.mimeType(job.key, function(err, mt) {
+            CloudProxy.mimeType(job.key, function(err, mt) {
                 job.response.setHeader('Content-Type', mt);
-                S3Proxy.sendResponseBody(job);
+                CloudProxy.sendResponseBody(job);
             });
         });
     });
 
-    S3Proxy.app.head(config.urlRegexp, function(req, res) {
+    CloudProxy.app.head(config.urlRegexp, function(req, res) {
 
-        S3Proxy.parseRequest('HEAD', req, res, function(job) {
+        CloudProxy.parseRequest('HEAD', req, res, function(job) {
             job.response.setHeader('Content-Type', 'text/plain');
-            S3Proxy.sendResponseBody(job);
+            CloudProxy.sendResponseBody(job);
 
         });
     });
 
-    S3Proxy.app.delete(config.urlRegexp, function(req, res) {
-        S3Proxy.parseRequest('DELETE', req, res, function(job) {
+    CloudProxy.app.delete(config.urlRegexp, function(req, res) {
+        CloudProxy.parseRequest('DELETE', req, res, function(job) {
             logger.info("Got delete " + job.path);
             fs.unlink(job.filename, function() {
                 logger.warn("DELETE " + job.path);
@@ -230,16 +230,16 @@ var config = require('./config');
             fs.exists(job.filename + '.tmp', function(answer) {
                 if (answer) { fs.unlink(job.filename + '.tmp'); }
             });
-            S3Proxy.sendEmpty(job, 200);
+            CloudProxy.sendEmpty(job, 200);
         });
     });
 
-    S3Proxy.start = function() {
+    CloudProxy.start = function() {
         if (config.checkConfig()) {
             https.createServer({
                 key: fs.readFileSync(config.serverKeyFile),
                 cert: fs.readFileSync(config.serverCertificateFile)
-            }, S3Proxy.app).listen(config.port);
+            }, CloudProxy.app).listen(config.port);
 
             logger.warn('Listening on port ' + config.port);
         }

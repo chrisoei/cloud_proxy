@@ -1,5 +1,5 @@
 #!/usr/bin/env node
 
-var S3Proxy = require('./cloud_proxy');
+var CloudProxy = require('./cloud_proxy');
 
-S3Proxy.start();
+CloudProxy.start();

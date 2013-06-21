@@ -5,7 +5,7 @@ var growl = require('growl');
 
     function notify(s) {
         growl(s, {
-            title: 'S3proxy'
+            title: 'Cloud Proxy'
         });
     }
 
