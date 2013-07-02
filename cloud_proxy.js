@@ -18,8 +18,8 @@ var config = require('./config');
     CloudProxy.mimeType = function(fn, callback) {
         var match = /\.(\w+)(\.gpg)?$/.exec(fn);
         match ?
-            redis.hget('io.oei:mime-types', match[1], callback) :
-            callback(config.defaultMimeType);
+            callback(null, CloudProxy.mimeTypes[match[1]]) :
+            callback(null, config.defaultMimeType);
     };
 
     CloudProxy.parseRequest = function(verb, request, response, callback) {
@@ -29,7 +29,8 @@ var config = require('./config');
             verb: verb
         };
 
-        if (request.cookies.auth !== config.authCookie) {
+        if ((request.cookies.auth !== config.authCookie) && (request.path !== config.authPath)) {
+          CloudProxy.sendEmpty(job, 404);
           return false;
         }
 
@@ -236,6 +237,9 @@ var config = require('./config');
 
     CloudProxy.start = function() {
         if (config.checkConfig()) {
+
+            CloudProxy.mimeTypes = JSON.parse(
+                fs.readFileSync(config.mimeTypesFile));
             https.createServer({
                 key: fs.readFileSync(config.serverKeyFile),
                 cert: fs.readFileSync(config.serverCertificateFile)
