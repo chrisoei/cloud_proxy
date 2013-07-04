@@ -13,6 +13,7 @@
     config.serverKeyFile = process.env.CLOUD_PROXY_SERVER_KEY;
     config.serverCertificateFile = process.env.CLOUD_PROXY_SERVER_CERTIFICATE;
     config.s3urlRegexp = /^\/s3\/([^\/]+)\/([^\/]+)\/(.+)$/;
+    config.youtubeRegexp = /^\/youtube\/(.+)$/;
 
     config.checkConfig = function () {
         if (!config.mimeTypesFile) {

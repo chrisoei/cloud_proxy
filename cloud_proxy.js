@@ -22,6 +22,8 @@ var config = require('./config');
             callback(null, config.defaultMimeType);
     };
 
+    CloudProxy.youtube = {};
+
     CloudProxy.parseRequest = function(verb, request, response, callback) {
         var job = {
             request: request,
@@ -38,6 +40,7 @@ var config = require('./config');
         job.bucket = job.request.params[1];
         job.key = job.request.params[2];
         job.path = job.bucket + '/' + job.key;
+        logger.debug("Path = " + job.path);
         var sha256 = crypto.createHash('sha256');
         sha256.write(job.path);
         var hexDigest = sha256.digest('hex');
@@ -49,6 +52,27 @@ var config = require('./config');
         if (!_.contains([ '127.0.0.1', '192.168.1.102' ], remoteAddress)) {
             logger.warn(remoteAddress + " " + verb + " " + job.path);
         }
+        callback(job);
+    };
+
+    CloudProxy.youtube.parseRequest = function(verb, request, response, callback) {
+        var job = {
+            request: request,
+            response: response,
+            verb: verb
+        };
+        if (request.cookies.auth !== config.authCookie) {
+            CloudProxy.sendEmpty(job, 404);
+            return false;
+        }
+        job.key = job.request.params[0];
+        job.path = job.key;
+        logger.debug("Key = ", job.key);
+        var sha256 = crypto.createHash('sha256');
+        sha256.write(job.path);
+        var hexDigest = sha256.digest('hex');
+        var dirs = cacheFile.cacheDir(2)(hexDigest);
+        job.filename = cacheFile.mkpath(config.cacheDir + '/youtube', dirs) + '/' + hexDigest;
         callback(job);
     };
 
@@ -169,6 +193,20 @@ var config = require('./config');
         }
     };
 
+    CloudProxy.youtube.sendResponseBody = function(job) {
+        if (fs.existsSync(job.filename)) {
+            logger.info('Cache hit: ' + job.path + ' = ' + job.filename);
+            CloudProxy.sendFile(job);
+        } else {
+            logger.info('Requesting from youtube: ' + job.path);
+            spawn('youtube-dl', [ '--prefer-free-formats', job.path, '--output', job.filename ]).on('close',
+            function() {
+                CloudProxy.sendFile(job);
+            });
+
+        }
+    }
+
     CloudProxy.sendResponseBody = function(job) {
         if (fs.existsSync(job.filename)) {
             logger.info("Cache hit: " + job.path + " = " + job.filename);
@@ -209,6 +247,17 @@ var config = require('./config');
             CloudProxy.mimeType(job.key, function(err, mt) {
                 job.response.setHeader('Content-Type', mt);
                 CloudProxy.sendResponseBody(job);
+            });
+        });
+    });
+
+    CloudProxy.app.get(config.youtubeRegexp, function(req, res) {
+
+        CloudProxy.youtube.parseRequest('GET', req, res, function(job) {
+
+            CloudProxy.mimeType('file.webm', function(err, mt) {
+                job.response.setHeader('Content-Type', mt);
+                CloudProxy.youtube.sendResponseBody(job);
             });
         });
     });
