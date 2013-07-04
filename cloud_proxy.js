@@ -10,7 +10,7 @@ var spawn = require('child_process').spawn;
 
 var config = require('./config');
 
-(function(CloudProxy) {
+(function (CloudProxy) {
     'use strict';
 
     function mimeType(fn, callback) {
@@ -50,7 +50,7 @@ var config = require('./config');
         return cacheFile.mkpath(config.cacheDir + '/' + svc, dirs) + '/' + hexDigest;
     }
 
-    s3.parseRequest = function(verb, request, response, callback) {
+    s3.parseRequest = function (verb, request, response, callback) {
 
         var job = parseCommon(verb, request, response);
 
@@ -62,7 +62,7 @@ var config = require('./config');
         callback(job);
     };
 
-    youtube.parseRequest = function(verb, request, response, callback) {
+    youtube.parseRequest = function (verb, request, response, callback) {
         var job = parseCommon(verb, request, response);
         job.path = job.key = job.request.params[0];
         job.filename = fileFromPath('youtube', job.path);
@@ -73,23 +73,23 @@ var config = require('./config');
         job.host = "s3-" + job.region + ".amazonaws.com";
         var expires = ((new Date()).getTime() / 1000 + config.defaultExpiration).toFixed(0);
         var stringToSign = [
-                'GET',
-                '',
-                '',
-                expires,
-                '/' + job.bucket + '/' + job.key
-            ].join("\n");
+            'GET',
+            '',
+            '',
+            expires,
+            '/' + job.bucket + '/' + job.key
+        ].join("\n");
         var hmac = crypto.createHmac('sha1', config.awsKey);
         hmac.write(stringToSign);
         var signature = encodeURIComponent(hmac.digest('base64'));
         job.url = [
-                '/',
-                job.bucket, '/',
-                job.key,
-                '?AWSAccessKeyId=', config.awsId,
-                '&Expires=', expires,
-                '&Signature=', signature
-            ].join('');
+            '/',
+            job.bucket, '/',
+            job.key,
+            '?AWSAccessKeyId=', config.awsId,
+            '&Expires=', expires,
+            '&Signature=', signature
+        ].join('');
     }
 
     function sendEmpty(job, responseCode) {
@@ -114,7 +114,7 @@ var config = require('./config');
             sendUnencryptedFile(job);
         } else {
             var gpg = spawn('gpg', [  '--output', job.transmitFilename, '--decrypt', job.filename ]);
-            gpg.on('exit', function() {
+            gpg.on('exit', function () {
                 sendUnencryptedFile(job);
             });
         }
@@ -131,7 +131,7 @@ var config = require('./config');
 
     function sendUnencryptedFile(job) {
         logger.debug("Transmitting file " + job.transmitFilename);
-        fs.stat(job.transmitFilename, function(err, stats) {
+        fs.stat(job.transmitFilename, function (err, stats) {
             job.response.setHeader('X-Cache-File', job.transmitFilename);
             job.response.setHeader('X-Cache-File-Date', stats.mtime.toString());
             job.response.setHeader('X-Cache-File-Stardate', starDate(stats.mtime));
@@ -152,30 +152,30 @@ var config = require('./config');
         if (job.proxyRes.statusCode === 200) {
             var ws = fs.createWriteStream(job.filename);
 
-            job.proxyRes.on('data', function(d) {
+            job.proxyRes.on('data', function (d) {
                 ws.write(d);
                 logger.debug("Received S3 data with length " + d.length);
             });
 
-            job.proxyRes.on('error', function() {
+            job.proxyRes.on('error', function () {
                 logger.error("In-transit error");
-                ws.end(function() {
+                ws.end(function () {
                     fs.unlink(job.filename);
                     sendEmpty(job, 404);
                 });
             });
 
-            job.proxyRes.on('close', function() {
+            job.proxyRes.on('close', function () {
                 logger.error("S3 closed connection");
-                ws.end(function() {
+                ws.end(function () {
                     fs.unlink(job.filename);
                     sendEmpty(job, 404);
                 });
             });
 
-            job.proxyRes.on('end', function() {
+            job.proxyRes.on('end', function () {
                 logger.info("S3 stream ended");
-                ws.end(function() {
+                ws.end(function () {
                     sendFile(job);
                     spawn('meta', [ 'checksum', job.filename ]);
                 });
@@ -186,20 +186,20 @@ var config = require('./config');
         }
     }
 
-    youtube.sendResponseBody = function(job) {
+    youtube.sendResponseBody = function (job) {
         if (fs.existsSync(job.filename)) {
             logger.info('Cache hit: ' + job.path + ' = ' + job.filename);
             sendFile(job);
         } else {
             logger.info('Requesting from youtube: ' + job.path);
             spawn('youtube-dl', [ '--prefer-free-formats', job.path, '--output', job.filename ]).on('exit',
-            function() {
-                sendFile(job);
-            });
+                function () {
+                    sendFile(job);
+                });
         }
     };
 
-    s3.sendResponseBody = function(job) {
+    s3.sendResponseBody = function (job) {
         if (fs.existsSync(job.filename)) {
             logger.info("Cache hit: " + job.path + " = " + job.filename);
             sendFile(job);
@@ -212,19 +212,19 @@ var config = require('./config');
             https.get({
                 host: job.host,
                 path: job.url
-            }, function(proxyRes) {
+            },function (proxyRes) {
                 job.proxyRes = proxyRes;
                 processS3Response(job);
-            }).on('close', function() {
-                logger.error("connection closed");
-            }).on('timeout', function() {
-                sendEmpty(job, 404);
-                logger.error("s3 timeout");
-            }).on('error', function(error) {
-                logger.error("error: " + error);
-                sendEmpty(job, 404);
-                logger.error("ERROR " + job.path);
-            });
+            }).on('close',function () {
+                    logger.error("connection closed");
+                }).on('timeout',function () {
+                    sendEmpty(job, 404);
+                    logger.error("s3 timeout");
+                }).on('error', function (error) {
+                    logger.error("error: " + error);
+                    sendEmpty(job, 404);
+                    logger.error("ERROR " + job.path);
+                });
         }
     };
 
@@ -232,51 +232,53 @@ var config = require('./config');
 
     CloudProxy.app.use(express.cookieParser());
 
-    CloudProxy.app.get(config.s3urlRegexp, function(req, res) {
+    CloudProxy.app.get(config.s3urlRegexp, function (req, res) {
 
-        s3.parseRequest('GET', req, res, function(job) {
+        s3.parseRequest('GET', req, res, function (job) {
 
-            mimeType(job.key, function(err, mt) {
+            mimeType(job.key, function (err, mt) {
                 job.response.setHeader('Content-Type', mt);
                 s3.sendResponseBody(job);
             });
         });
     });
 
-    CloudProxy.app.get(config.youtubeRegexp, function(req, res) {
+    CloudProxy.app.get(config.youtubeRegexp, function (req, res) {
 
-        youtube.parseRequest('GET', req, res, function(job) {
+        youtube.parseRequest('GET', req, res, function (job) {
 
-            mimeType('file.webm', function(err, mt) {
+            mimeType('file.webm', function (err, mt) {
                 job.response.setHeader('Content-Type', mt);
                 youtube.sendResponseBody(job);
             });
         });
     });
 
-    CloudProxy.app.head(config.s3urlRegexp, function(req, res) {
+    CloudProxy.app.head(config.s3urlRegexp, function (req, res) {
 
-        s3.parseRequest('HEAD', req, res, function(job) {
+        s3.parseRequest('HEAD', req, res, function (job) {
             job.response.setHeader('Content-Type', 'text/plain');
             s3.sendResponseBody(job);
 
         });
     });
 
-    CloudProxy.app.delete(config.s3urlRegexp, function(req, res) {
-        s3.parseRequest('DELETE', req, res, function(job) {
+    CloudProxy.app.delete(config.s3urlRegexp, function (req, res) {
+        s3.parseRequest('DELETE', req, res, function (job) {
             logger.info("Got delete " + job.path);
-            fs.unlink(job.filename, function() {
+            fs.unlink(job.filename, function () {
                 logger.warn("DELETE " + job.path);
             });
-            fs.exists(job.filename + '.tmp', function(answer) {
-                if (answer) { fs.unlink(job.filename + '.tmp'); }
+            fs.exists(job.filename + '.tmp', function (answer) {
+                if (answer) {
+                    fs.unlink(job.filename + '.tmp');
+                }
             });
             sendEmpty(job, 200);
         });
     });
 
-    CloudProxy.start = function() {
+    CloudProxy.start = function () {
         if (config.checkConfig()) {
 
             CloudProxy.mimeTypes = JSON.parse(
