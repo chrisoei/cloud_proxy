@@ -1,13 +1,11 @@
 #!/usr/bin/env node
 
-var _ = require('lodash');
 var cacheFile = require('./cache_file');
 var crypto = require('crypto');
 var express = require('express');
 var fs = require('fs');
 var https = require('https');
 var logger = require('./logger');
-var redis = require('redis').createClient();
 var spawn = require('child_process').spawn;
 
 var config = require('./config');
@@ -15,16 +13,23 @@ var config = require('./config');
 (function(CloudProxy) {
     'use strict';
 
-    CloudProxy.mimeType = function(fn, callback) {
+    function mimeType(fn, callback) {
         var match = /\.(\w+)(\.gpg)?$/.exec(fn);
         match ?
             callback(null, CloudProxy.mimeTypes[match[1]]) :
             callback(null, config.defaultMimeType);
-    };
+    }
 
-    CloudProxy.youtube = {};
+    function sha256hash(s) {
+        var sha256 = crypto.createHash('sha256');
+        sha256.write(s);
+        return sha256.digest('hex');
+    }
 
-    CloudProxy.parseRequest = function(verb, request, response, callback) {
+    var s3 = {};
+    var youtube = {};
+
+    function parseCommon(verb, request, response) {
         var job = {
             request: request,
             response: response,
@@ -32,51 +37,39 @@ var config = require('./config');
         };
 
         if ((request.cookies.auth !== config.authCookie) && (request.path !== config.authPath)) {
-          CloudProxy.sendEmpty(job, 404);
-          return false;
+            sendEmpty(job, 404);
+            return false;
         }
+        logger.info("Got " + verb + " request from " + request.connection.remoteAddress);
+        return job;
+    }
+
+    function fileFromPath(svc, path) {
+        var hexDigest = sha256hash(path);
+        var dirs = cacheFile.cacheDir(2)(hexDigest);
+        return cacheFile.mkpath(config.cacheDir + '/' + svc, dirs) + '/' + hexDigest;
+    }
+
+    s3.parseRequest = function(verb, request, response, callback) {
+
+        var job = parseCommon(verb, request, response);
 
         job.region = job.request.params[0];
         job.bucket = job.request.params[1];
         job.key = job.request.params[2];
         job.path = job.bucket + '/' + job.key;
-        logger.debug("Path = " + job.path);
-        var sha256 = crypto.createHash('sha256');
-        sha256.write(job.path);
-        var hexDigest = sha256.digest('hex');
-        var dirs = cacheFile.cacheDir(2)(hexDigest);
-        job.filename = cacheFile.mkpath(config.cacheDir + '/s3', dirs) + '/' + hexDigest;
-
-        var remoteAddress = request.connection.remoteAddress;
-        logger.info("Got " + verb + " request from " + remoteAddress);
-        if (!_.contains([ '127.0.0.1', '192.168.1.102' ], remoteAddress)) {
-            logger.warn(remoteAddress + " " + verb + " " + job.path);
-        }
+        job.filename = fileFromPath('s3', job.path);
         callback(job);
     };
 
-    CloudProxy.youtube.parseRequest = function(verb, request, response, callback) {
-        var job = {
-            request: request,
-            response: response,
-            verb: verb
-        };
-        if (request.cookies.auth !== config.authCookie) {
-            CloudProxy.sendEmpty(job, 404);
-            return false;
-        }
-        job.key = job.request.params[0];
-        job.path = job.key;
-        logger.debug("Key = ", job.key);
-        var sha256 = crypto.createHash('sha256');
-        sha256.write(job.path);
-        var hexDigest = sha256.digest('hex');
-        var dirs = cacheFile.cacheDir(2)(hexDigest);
-        job.filename = cacheFile.mkpath(config.cacheDir + '/youtube', dirs) + '/' + hexDigest;
+    youtube.parseRequest = function(verb, request, response, callback) {
+        var job = parseCommon(verb, request, response);
+        job.path = job.key = job.request.params[0];
+        job.filename = fileFromPath('youtube', job.path);
         callback(job);
     };
 
-    CloudProxy.s3url = function(job) {
+    function s3url(job) {
         job.host = "s3-" + job.region + ".amazonaws.com";
         var expires = ((new Date()).getTime() / 1000 + config.defaultExpiration).toFixed(0);
         var stringToSign = [
@@ -97,35 +90,35 @@ var config = require('./config');
                 '&Expires=', expires,
                 '&Signature=', signature
             ].join('');
-    };
+    }
 
-    CloudProxy.sendEmpty = function(job, responseCode) {
+    function sendEmpty(job, responseCode) {
         job.response.setHeader('Content-Length', 0);
         job.response.statusCode = responseCode;
         job.response.end();
-    };
+    }
 
-    CloudProxy.sendFile = function(job) {
+    function sendFile(job) {
         if (/\.gpg$/.test(job.key)) {
-            CloudProxy.sendEncryptedFile(job);
+            sendEncryptedFile(job);
         } else {
             job.transmitFilename = job.filename;
-            CloudProxy.sendUnencryptedFile(job);
+            sendUnencryptedFile(job);
         }
-    };
+    }
 
-    CloudProxy.sendEncryptedFile = function(job) {
+    function sendEncryptedFile(job) {
         logger.debug("Sending encrypted file " + job.filename);
         job.transmitFilename = job.filename + ".tmp";
         if (fs.existsSync(job.transmitFilename)) {
-            CloudProxy.sendUnencryptedFile(job);
+            sendUnencryptedFile(job);
         } else {
             var gpg = spawn('gpg', [  '--output', job.transmitFilename, '--decrypt', job.filename ]);
             gpg.on('exit', function() {
-                CloudProxy.sendUnencryptedFile(job);
+                sendUnencryptedFile(job);
             });
         }
-    };
+    }
 
     function starDate(d) {
         var y = d.getUTCFullYear();
@@ -136,7 +129,7 @@ var config = require('./config');
         return (y + (t - t0) / (t1 - t0)).toFixed(15);
     }
 
-    CloudProxy.sendUnencryptedFile = function(job) {
+    function sendUnencryptedFile(job) {
         logger.debug("Transmitting file " + job.transmitFilename);
         fs.stat(job.transmitFilename, function(err, stats) {
             job.response.setHeader('X-Cache-File', job.transmitFilename);
@@ -145,15 +138,15 @@ var config = require('./config');
 
             if (job.verb === 'HEAD') {
                 job.response.setHeader('X-Cache-File-Size', stats.size);
-                CloudProxy.sendEmpty(job, 200);
+                sendEmpty(job, 200);
             } else {
                 job.response.setHeader('Content-Length', stats.size);
                 fs.createReadStream(job.transmitFilename).pipe(job.response);
             }
         });
-    };
+    }
 
-    CloudProxy.processS3Response = function(job) {
+    function processS3Response(job) {
         logger.info("Got response from s3: " + job.proxyRes.statusCode);
 
         if (job.proxyRes.statusCode === 200) {
@@ -168,7 +161,7 @@ var config = require('./config');
                 logger.error("In-transit error");
                 ws.end(function() {
                     fs.unlink(job.filename);
-                    CloudProxy.sendEmpty(job, 404);
+                    sendEmpty(job, 404);
                 });
             });
 
@@ -176,44 +169,43 @@ var config = require('./config');
                 logger.error("S3 closed connection");
                 ws.end(function() {
                     fs.unlink(job.filename);
-                    CloudProxy.sendEmpty(job, 404);
+                    sendEmpty(job, 404);
                 });
             });
 
             job.proxyRes.on('end', function() {
                 logger.info("S3 stream ended");
                 ws.end(function() {
-                    CloudProxy.sendFile(job);
+                    sendFile(job);
                     spawn('meta', [ 'checksum', job.filename ]);
                 });
             });
         } else {
-            CloudProxy.sendEmpty(job, job.proxyRes.statusCode);
+            sendEmpty(job, job.proxyRes.statusCode);
             logger.error("ERROR (" + job.path + ")");
-        }
-    };
-
-    CloudProxy.youtube.sendResponseBody = function(job) {
-        if (fs.existsSync(job.filename)) {
-            logger.info('Cache hit: ' + job.path + ' = ' + job.filename);
-            CloudProxy.sendFile(job);
-        } else {
-            logger.info('Requesting from youtube: ' + job.path);
-            spawn('youtube-dl', [ '--prefer-free-formats', job.path, '--output', job.filename ]).on('close',
-            function() {
-                CloudProxy.sendFile(job);
-            });
-
         }
     }
 
-    CloudProxy.sendResponseBody = function(job) {
+    youtube.sendResponseBody = function(job) {
+        if (fs.existsSync(job.filename)) {
+            logger.info('Cache hit: ' + job.path + ' = ' + job.filename);
+            sendFile(job);
+        } else {
+            logger.info('Requesting from youtube: ' + job.path);
+            spawn('youtube-dl', [ '--prefer-free-formats', job.path, '--output', job.filename ]).on('exit',
+            function() {
+                sendFile(job);
+            });
+        }
+    };
+
+    s3.sendResponseBody = function(job) {
         if (fs.existsSync(job.filename)) {
             logger.info("Cache hit: " + job.path + " = " + job.filename);
-            CloudProxy.sendFile(job);
+            sendFile(job);
         } else {
 
-            CloudProxy.s3url(job);
+            s3url(job);
 
             logger.info('Requesting from s3: ' + job.path);
 
@@ -222,15 +214,15 @@ var config = require('./config');
                 path: job.url
             }, function(proxyRes) {
                 job.proxyRes = proxyRes;
-                CloudProxy.processS3Response(job);
+                processS3Response(job);
             }).on('close', function() {
                 logger.error("connection closed");
             }).on('timeout', function() {
-                CloudProxy.sendEmpty(job, 404);
+                sendEmpty(job, 404);
                 logger.error("s3 timeout");
             }).on('error', function(error) {
                 logger.error("error: " + error);
-                CloudProxy.sendEmpty(job, 404);
+                sendEmpty(job, 404);
                 logger.error("ERROR " + job.path);
             });
         }
@@ -242,37 +234,37 @@ var config = require('./config');
 
     CloudProxy.app.get(config.s3urlRegexp, function(req, res) {
 
-        CloudProxy.parseRequest('GET', req, res, function(job) {
+        s3.parseRequest('GET', req, res, function(job) {
 
-            CloudProxy.mimeType(job.key, function(err, mt) {
+            mimeType(job.key, function(err, mt) {
                 job.response.setHeader('Content-Type', mt);
-                CloudProxy.sendResponseBody(job);
+                s3.sendResponseBody(job);
             });
         });
     });
 
     CloudProxy.app.get(config.youtubeRegexp, function(req, res) {
 
-        CloudProxy.youtube.parseRequest('GET', req, res, function(job) {
+        youtube.parseRequest('GET', req, res, function(job) {
 
-            CloudProxy.mimeType('file.webm', function(err, mt) {
+            mimeType('file.webm', function(err, mt) {
                 job.response.setHeader('Content-Type', mt);
-                CloudProxy.youtube.sendResponseBody(job);
+                youtube.sendResponseBody(job);
             });
         });
     });
 
     CloudProxy.app.head(config.s3urlRegexp, function(req, res) {
 
-        CloudProxy.parseRequest('HEAD', req, res, function(job) {
+        s3.parseRequest('HEAD', req, res, function(job) {
             job.response.setHeader('Content-Type', 'text/plain');
-            CloudProxy.sendResponseBody(job);
+            s3.sendResponseBody(job);
 
         });
     });
 
     CloudProxy.app.delete(config.s3urlRegexp, function(req, res) {
-        CloudProxy.parseRequest('DELETE', req, res, function(job) {
+        s3.parseRequest('DELETE', req, res, function(job) {
             logger.info("Got delete " + job.path);
             fs.unlink(job.filename, function() {
                 logger.warn("DELETE " + job.path);
@@ -280,7 +272,7 @@ var config = require('./config');
             fs.exists(job.filename + '.tmp', function(answer) {
                 if (answer) { fs.unlink(job.filename + '.tmp'); }
             });
-            CloudProxy.sendEmpty(job, 200);
+            sendEmpty(job, 200);
         });
     });
 
