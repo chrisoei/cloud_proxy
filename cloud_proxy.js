@@ -192,7 +192,7 @@ var config = require('./config');
             sendFile(job);
         } else {
             logger.info('Requesting from youtube: ' + job.path);
-            spawn('youtube-dl', [ '--prefer-free-formats', job.path, '--output', job.filename ]).on('exit',
+            spawn('youtube-dl', [ '--prefer-free-formats', 'http://www.youtube.com/watch?v=' + job.path, '--output', job.filename ]).on('exit',
                 function () {
                     sendFile(job);
                 });
