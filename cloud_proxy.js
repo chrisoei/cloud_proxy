@@ -42,7 +42,7 @@ var config = require('./config');
         sha256.write(job.path);
         var hexDigest = sha256.digest('hex');
         var dirs = cacheFile.cacheDir(2)(hexDigest);
-        job.filename = cacheFile.mkpath(config.cacheDir, dirs) + '/' + hexDigest;
+        job.filename = cacheFile.mkpath(config.cacheDir + '/s3', dirs) + '/' + hexDigest;
 
         var remoteAddress = request.connection.remoteAddress;
         logger.info("Got " + verb + " request from " + remoteAddress);
@@ -202,7 +202,7 @@ var config = require('./config');
 
     CloudProxy.app.use(express.cookieParser());
 
-    CloudProxy.app.get(config.urlRegexp, function(req, res) {
+    CloudProxy.app.get(config.s3urlRegexp, function(req, res) {
 
         CloudProxy.parseRequest('GET', req, res, function(job) {
 
@@ -213,7 +213,7 @@ var config = require('./config');
         });
     });
 
-    CloudProxy.app.head(config.urlRegexp, function(req, res) {
+    CloudProxy.app.head(config.s3urlRegexp, function(req, res) {
 
         CloudProxy.parseRequest('HEAD', req, res, function(job) {
             job.response.setHeader('Content-Type', 'text/plain');
@@ -222,7 +222,7 @@ var config = require('./config');
         });
     });
 
-    CloudProxy.app.delete(config.urlRegexp, function(req, res) {
+    CloudProxy.app.delete(config.s3urlRegexp, function(req, res) {
         CloudProxy.parseRequest('DELETE', req, res, function(job) {
             logger.info("Got delete " + job.path);
             fs.unlink(job.filename, function() {
