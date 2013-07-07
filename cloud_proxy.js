@@ -207,6 +207,7 @@ var config = require('./config');
             spawn('youtube-dl', [ '--prefer-free-formats', 'http://www.youtube.com/watch?v=' + job.path, '--output', job.filename ]).on('exit',
                 function () {
                     sendFile(job);
+                    spawn('meta', [ 'checksum', job.filename ]);
                 });
         }
     };
