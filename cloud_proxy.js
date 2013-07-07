@@ -140,8 +140,20 @@ var config = require('./config');
                 job.response.setHeader('X-Cache-File-Size', stats.size);
                 sendEmpty(job, 200);
             } else {
-                job.response.setHeader('Content-Length', stats.size);
-                fs.createReadStream(job.transmitFilename).pipe(job.response);
+                if (job.request.headers.range) {
+                    job.response.statusCode = 206;
+                    var tmp = job.request.headers.range.match(/bytes=(\d*)-(\d*)/);
+                    var startByte = parseInt(tmp[1], 10) || 0;
+                    var endByte = parseInt(tmp[2], 10) || (stats.size - 1);
+                    job.response.setHeader('Accept-Ranges', 'bytes');
+                    job.response.setHeader('Content-Length', endByte - startByte + 1);
+                    job.response.setHeader('Content-Range', 'bytes ' + startByte + '-' + endByte + '/' + stats.size);
+                    fs.createReadStream(job.transmitFilename, { start: startByte, end: endByte }).pipe(job.response);
+                } else {
+                    job.response.statusCode = 200;
+                    job.response.setHeader('Content-Length', stats.size);
+                    fs.createReadStream(job.transmitFilename).pipe(job.response);
+                }
             }
         });
     }
