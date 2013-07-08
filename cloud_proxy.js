@@ -276,6 +276,15 @@ var config = require('./config');
         });
     });
 
+    CloudProxy.app.head(config.youtubeRegexp, function (req, res) {
+
+        youtube.parseRequest('HEAD', req, res, function (job) {
+            job.response.setHeader('Content-Type', 'text/plain');
+            youtube.sendResponseBody(job);
+
+        });
+    });
+
     CloudProxy.app.delete(config.s3urlRegexp, function (req, res) {
         s3.parseRequest('DELETE', req, res, function (job) {
             logger.info("Got delete " + job.path);
