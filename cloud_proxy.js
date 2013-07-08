@@ -300,6 +300,16 @@ var config = require('./config');
         });
     });
 
+    CloudProxy.app.delete(config.youtubeRegexp, function (req, res) {
+        youtube.parseRequest('DELETE', req, res, function (job) {
+            logger.info("Got delete " + job.path);
+            fs.unlink(job.filename, function () {
+                logger.warn("DELETE " + job.path);
+            });
+            sendEmpty(job, 200);
+        });
+    });
+
     CloudProxy.start = function () {
         if (config.checkConfig()) {
 
