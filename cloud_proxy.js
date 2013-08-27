@@ -101,6 +101,8 @@ var config = require('./config');
     function sendFile(job) {
         if (/\.gpg$/.test(job.key)) {
             sendEncryptedFile(job);
+        } else if (job.proxyRes && (job.proxyRes.headers['x-amz-meta-openssl'] == 'aes-256-cbc')) {
+            sendAESEncryptedFile(job);
         } else {
             job.transmitFilename = job.filename;
             sendUnencryptedFile(job);
@@ -115,6 +117,22 @@ var config = require('./config');
         } else {
             var gpg = spawn('gpg', [  '--output', job.transmitFilename, '--decrypt', job.filename ]);
             gpg.on('exit', function () {
+                sendUnencryptedFile(job);
+            });
+        }
+    }
+
+    function sendAESEncryptedFile(job) {
+        logger.debug("Sending AES-256 encrypted file " + job.filename);
+        fs.renameSync(job.filename, job.filename + ".enc");
+        job.transmitFilename = job.filename;
+        if (fs.existsSync(job.transmitFilename)) {
+            sendUnencryptedFile(job);
+        } else {
+            var openssl = spawn('openssl', [ 'enc', '-d', '-aes-256-cbc', '-pass', 'env:CLOUD_PROXY_AES_KEY',
+                '-in', job.filename + ".enc", '-out', job.transmitFilename ]);
+            openssl.on('exit', function () {
+                fs.unlinkSync(job.filename + ".enc");
                 sendUnencryptedFile(job);
             });
         }
@@ -189,7 +207,6 @@ var config = require('./config');
                 logger.info("S3 stream ended");
                 ws.end(function () {
                     sendFile(job);
-                    spawn('meta', [ 'checksum', job.filename ]);
                 });
             });
         } else {
@@ -207,7 +224,6 @@ var config = require('./config');
             spawn('youtube-dl', [ '--prefer-free-formats', 'http://www.youtube.com/watch?v=' + job.path, '--output', job.filename ]).on('exit',
                 function () {
                     sendFile(job);
-                    spawn('meta', [ 'checksum', job.filename ]);
                 });
         }
     };
