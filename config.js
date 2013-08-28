@@ -1,3 +1,5 @@
+var fs = require('fs');
+
 (function (config) {
     'use strict';
 
@@ -31,6 +33,15 @@
         if (!config.cacheDir) {
             console.error("Must set CLOUD_PROXY_CACHE_DIR");
             return false;
+        }
+	if (!fs.existsSync(config.cacheDir)) {
+            fs.mkdirSync(config.cacheDir);
+        }
+	if (!fs.existsSync(config.cacheDir + "/s3")) {
+            fs.mkdirSync(config.cacheDir + "/s3");
+        }
+	if (!fs.existsSync(config.cacheDir + "/youtube")) {
+            fs.mkdirSync(config.cacheDir + "/youtube");
         }
         if (!(config.awsId && config.awsKey)) {
             console.error("Must set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY");
