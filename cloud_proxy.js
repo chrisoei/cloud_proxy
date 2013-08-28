@@ -133,6 +133,7 @@ var config = require('./config');
                 '-in', job.filename + ".enc", '-out', job.transmitFilename ]);
             openssl.on('exit', function () {
                 fs.unlinkSync(job.filename + ".enc");
+                spawn('meta', [ 'checksum', job.transmitFilename ])
                 sendUnencryptedFile(job);
             });
         }
