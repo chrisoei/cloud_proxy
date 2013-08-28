@@ -224,6 +224,7 @@ var config = require('./config');
             logger.info('Requesting from youtube: ' + job.path);
             spawn('youtube-dl', [ '--prefer-free-formats', 'http://www.youtube.com/watch?v=' + job.path, '--output', job.filename ]).on('exit',
                 function () {
+                    spawn('meta', [ 'checksum', job.filename ])
                     sendFile(job);
                 });
         }
