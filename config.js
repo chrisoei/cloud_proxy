@@ -20,6 +20,10 @@
             console.error("Must set MIME_TYPES_FILE");
             return false;
         }
+	if (!process.env.CLOUD_PROXY_AES_KEY) {
+            console.error("Must set CLOUD_PROXY_AES_KEY");
+            return false;
+	}
         if (!config.authCookie) {
             console.error("Must set CLOUD_PROXY_AUTH_COOKIE");
             return false;
